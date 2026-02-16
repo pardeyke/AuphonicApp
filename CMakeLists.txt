@@ -31,6 +31,7 @@ target_sources(AuphonicApp PRIVATE
     Source/ManualOptionsComponent.cpp
     Source/StatusComponent.cpp
     Source/FileDropComponent.cpp
+    Source/CreditsComponent.cpp
 )
 
 target_compile_definitions(AuphonicApp PRIVATE

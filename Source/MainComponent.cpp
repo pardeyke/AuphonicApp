@@ -6,6 +6,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     addAndMakeVisible (settingsButton);
     addAndMakeVisible (titleLabel);
     addAndMakeVisible (fileDropComponent);
+    addAndMakeVisible (creditsComponent);
     addAndMakeVisible (presetListComponent);
     addAndMakeVisible (optionsViewport);
     addAndMakeVisible (statusComponent);
@@ -24,7 +25,11 @@ MainComponent::MainComponent (const juce::File& initialFile)
 
     cancelButton.setEnabled (false);
 
-    fileDropComponent.onFileSelected = [this] (const juce::File&) { updateButtonStates(); };
+    fileDropComponent.onFileSelected = [this] (const juce::File& f)
+    {
+        creditsComponent.setFile (f);
+        updateButtonStates();
+    };
     presetListComponent.onSelectionChanged = [this] { updateButtonStates(); };
 
     // Init API client
@@ -33,10 +38,16 @@ MainComponent::MainComponent (const juce::File& initialFile)
     workflow->setListener (this);
 
     if (initialFile.existsAsFile())
+    {
         fileDropComponent.setFile (initialFile);
+        creditsComponent.setFile (initialFile);
+    }
 
     if (settingsManager.hasApiToken())
+    {
         refreshPresets();
+        refreshCredits();
+    }
 
     updateButtonStates();
     setSize (520, 680);
@@ -66,7 +77,9 @@ void MainComponent::resized()
     // File drop area
     fileDropComponent.setBounds (area.removeFromTop (60));
 
-    area.removeFromTop (10);
+    area.removeFromTop (6);
+    creditsComponent.setBounds (area.removeFromTop (20));
+    area.removeFromTop (6);
 
     // Preset
     presetListComponent.setBounds (area.removeFromTop (26));
@@ -105,6 +118,7 @@ void MainComponent::onSettingsClicked()
     {
         apiClient->setToken (settingsManager.getApiToken());
         refreshPresets();
+        refreshCredits();
     });
 }
 
@@ -147,6 +161,15 @@ void MainComponent::onCancelClicked()
     workflow->cancel();
     statusComponent.reset();
     updateButtonStates();
+}
+
+void MainComponent::refreshCredits()
+{
+    apiClient->fetchUserInfo ([this] (bool success, const UserCredits& credits)
+    {
+        if (success)
+            creditsComponent.setCredits (credits);
+    });
 }
 
 void MainComponent::refreshPresets()

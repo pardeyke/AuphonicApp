@@ -9,6 +9,13 @@ struct AuphonicPreset
     juce::String name;
 };
 
+struct UserCredits
+{
+    double credits = 0.0;           // total combined credits in hours
+    double onetimeCredits = 0.0;    // one-time credits in hours
+    double recurringCredits = 0.0;  // recurring credits in hours
+};
+
 struct ProductionStatus
 {
     int statusCode = 0;         // 0=incomplete, 2=production started, 3=processing, 4=done, 5+=error
@@ -24,6 +31,9 @@ class AuphonicApiClient
 public:
     explicit AuphonicApiClient (const juce::String& apiToken);
     void setToken (const juce::String& token);
+
+    using UserInfoCallback = std::function<void (bool success, const UserCredits& credits)>;
+    void fetchUserInfo (UserInfoCallback callback);
 
     using PresetsCallback = std::function<void (bool success, const juce::Array<AuphonicPreset>& presets)>;
     void fetchPresets (PresetsCallback callback);

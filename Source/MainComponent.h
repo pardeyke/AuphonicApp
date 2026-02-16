@@ -9,6 +9,7 @@
 #include "PresetListComponent.h"
 #include "ManualOptionsComponent.h"
 #include "StatusComponent.h"
+#include "CreditsComponent.h"
 
 class MainComponent : public juce::Component,
                       public ProcessingWorkflow::Listener
@@ -33,6 +34,7 @@ private:
     void onProcessClicked();
     void onCancelClicked();
     void refreshPresets();
+    void refreshCredits();
     void updateButtonStates();
 
     SettingsManager settingsManager;
@@ -43,6 +45,7 @@ private:
     juce::Label titleLabel { {}, "Auphonic App" };
 
     FileDropComponent fileDropComponent;
+    CreditsComponent creditsComponent;
     PresetListComponent presetListComponent;
     ManualOptionsComponent manualOptionsComponent;
     juce::Viewport optionsViewport;

@@ -41,6 +41,32 @@ juce::String AuphonicApiClient::performPost (const juce::URL& url, int& statusCo
     return {};
 }
 
+void AuphonicApiClient::fetchUserInfo (UserInfoCallback callback)
+{
+    juce::Thread::launch ([this, callback]
+    {
+        int statusCode = 0;
+        auto url = makeUrl ("/user.json");
+        auto response = performGet (url, statusCode);
+
+        UserCredits credits;
+        bool success = false;
+
+        if (statusCode == 200)
+        {
+            auto json = juce::JSON::parse (response);
+            auto data = json.getProperty ("data", juce::var());
+
+            credits.credits = (double) data.getProperty ("credits", 0.0);
+            credits.onetimeCredits = (double) data.getProperty ("onetime_credits", 0.0);
+            credits.recurringCredits = (double) data.getProperty ("recurring_credits", 0.0);
+            success = true;
+        }
+
+        juce::MessageManager::callAsync ([callback, success, credits] { callback (success, credits); });
+    });
+}
+
 void AuphonicApiClient::fetchPresets (PresetsCallback callback)
 {
     juce::Thread::launch ([this, callback]
