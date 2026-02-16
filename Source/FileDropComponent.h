@@ -24,7 +24,6 @@ public:
 private:
     juce::File currentFile;
     juce::TextButton chooseFileButton { "Choose File" };
-    juce::Label fileLabel;
     bool isDraggingOver = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileDropComponent)

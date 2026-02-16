@@ -44,8 +44,7 @@ private:
     std::unique_ptr<AuphonicApiClient> apiClient;
     std::unique_ptr<ProcessingWorkflow> workflow;
 
-    juce::TextButton settingsButton { "Settings" };
-    juce::Label titleLabel { {}, "Auphonic App" };
+    juce::TextButton settingsButton { juce::String::charToString (0x2699) + juce::String::charToString (0xFE0F) };
 
     FileDropComponent fileDropComponent;
     CreditsComponent creditsComponent;

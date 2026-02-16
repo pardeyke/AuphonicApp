@@ -9,6 +9,8 @@ public:
 
     void resized() override;
 
+    int getRequiredHeight() const;
+
     juce::var getSettings() const;
     bool hasAnyEnabled() const;
 

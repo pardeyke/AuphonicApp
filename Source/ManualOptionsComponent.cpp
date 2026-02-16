@@ -2,11 +2,6 @@
 
 ManualOptionsComponent::ManualOptionsComponent()
 {
-    addAndMakeVisible (separatorLabel);
-    separatorLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
-    separatorLabel.setColour (juce::Label::textColourId, juce::Colour (0xff8e8e93));
-    separatorLabel.setJustificationType (juce::Justification::centredLeft);
-
     // ── Adaptive Leveler ──
     addAndMakeVisible (levelerToggle);
     levelerToggle.setToggleState (true, juce::dontSendNotification);
@@ -304,9 +299,7 @@ void ManualOptionsComponent::updateDependentVisibility()
     filterMethodLabel.setVisible (filterEnabled);
     filterMethodCombo.setVisible (filterEnabled);
 
-    resized();
-    if (auto* parent = getParentComponent())
-        parent->resized();
+    setSize (getWidth(), getRequiredHeight());
 }
 
 // ── Layout ──
@@ -315,11 +308,10 @@ void ManualOptionsComponent::resized()
 {
     auto area = getLocalBounds();
 
-    separatorLabel.setBounds (area.removeFromTop (rowH));
-    area.removeFromTop (gap);
+    auto toggleWidth = [] (const juce::ToggleButton& t) { return 36 + 8 + (int) juce::Font (juce::FontOptions (13.0f)).getStringWidthFloat (t.getButtonText()) + 4; };
 
     // ── Leveler ──
-    levelerToggle.setBounds (area.removeFromTop (rowH));
+    { auto row = area.removeFromTop (rowH); levelerToggle.setBounds (row.removeFromLeft (toggleWidth (levelerToggle))); }
     area.removeFromTop (gap);
 
     if (strengthCombo.isVisible())
@@ -338,7 +330,7 @@ void ManualOptionsComponent::resized()
     {
         auto row = area.removeFromTop (rowH);
         row.removeFromLeft (indent);
-        separateMsToggle.setBounds (row);
+        separateMsToggle.setBounds (row.removeFromLeft (toggleWidth (separateMsToggle)));
         area.removeFromTop (gap);
     }
 
@@ -382,7 +374,7 @@ void ManualOptionsComponent::resized()
     {
         auto row = area.removeFromTop (rowH);
         row.removeFromLeft (indent);
-        broadcastToggle.setBounds (row);
+        broadcastToggle.setBounds (row.removeFromLeft (toggleWidth (broadcastToggle)));
         area.removeFromTop (gap);
     }
 
@@ -408,7 +400,7 @@ void ManualOptionsComponent::resized()
     }
 
     // ── Noise Reduction ──
-    noiseToggle.setBounds (area.removeFromTop (rowH));
+    { auto row = area.removeFromTop (rowH); noiseToggle.setBounds (row.removeFromLeft (toggleWidth (noiseToggle))); }
     area.removeFromTop (gap);
 
     if (methodCombo.isVisible())
@@ -448,7 +440,7 @@ void ManualOptionsComponent::resized()
     }
 
     // ── Filtering ──
-    filterToggle.setBounds (area.removeFromTop (rowH));
+    { auto row = area.removeFromTop (rowH); filterToggle.setBounds (row.removeFromLeft (toggleWidth (filterToggle))); }
     area.removeFromTop (gap);
 
     if (filterMethodCombo.isVisible())
@@ -463,10 +455,56 @@ void ManualOptionsComponent::resized()
     // ── Loudness ──
     {
         auto row = area.removeFromTop (rowH);
-        loudnessToggle.setBounds (row.removeFromLeft (200));
+        loudnessToggle.setBounds (row.removeFromLeft (toggleWidth (loudnessToggle)));
+        row.removeFromLeft (8);
         loudnessTargetLabel.setBounds (row.removeFromLeft (50));
         loudnessTargetCombo.setBounds (row.removeFromLeft (100));
     }
+}
+
+int ManualOptionsComponent::getRequiredHeight() const
+{
+    int h = 0;
+    auto addRow = [&] { h += rowH + gap; };
+
+    // Leveler toggle
+    addRow();
+
+    if (strengthCombo.isVisible()) addRow();
+    if (separateMsToggle.isVisible()) addRow();
+
+    if (classifierCombo.isVisible())
+    {
+        addRow(); // classifier
+        addRow(); // speech strength/compressor
+        addRow(); // music strength/compressor
+    }
+
+    if (musicGainCombo.isVisible()) addRow();
+    if (broadcastToggle.isVisible()) addRow();
+
+    if (maxLraCombo.isVisible())
+    {
+        addRow(); // max LRA
+        addRow(); // max S
+        addRow(); // max M
+    }
+
+    // Noise toggle
+    addRow();
+    if (methodCombo.isVisible()) addRow();
+    if (noiseAmountCombo.isVisible()) addRow();
+    if (reverbAmountCombo.isVisible()) addRow();
+    if (breathAmountCombo.isVisible()) addRow();
+
+    // Filter toggle
+    addRow();
+    if (filterMethodCombo.isVisible()) addRow();
+
+    // Loudness row
+    h += rowH;
+
+    return h;
 }
 
 // ── Build settings JSON ──

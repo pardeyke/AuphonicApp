@@ -37,6 +37,8 @@ public:
 
     void drawLabel (juce::Graphics&, juce::Label&) override;
 
+    juce::Label* createComboBoxTextBox (juce::ComboBox&) override;
+
     juce::Font getComboBoxFont (juce::ComboBox&) override;
     juce::Font getPopupMenuFont() override;
     juce::Font getLabelFont (juce::Label&) override;

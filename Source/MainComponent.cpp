@@ -4,7 +4,6 @@
 MainComponent::MainComponent (const juce::File& initialFile)
 {
     addAndMakeVisible (settingsButton);
-    addAndMakeVisible (titleLabel);
     addAndMakeVisible (fileDropComponent);
     addAndMakeVisible (creditsComponent);
     addAndMakeVisible (presetListComponent);
@@ -16,9 +15,6 @@ MainComponent::MainComponent (const juce::File& initialFile)
 
     optionsViewport.setViewedComponent (&manualOptionsComponent, false);
     optionsViewport.setScrollBarsShown (true, false);
-
-    titleLabel.setFont (juce::FontOptions (16.0f, juce::Font::bold));
-    titleLabel.setJustificationType (juce::Justification::centredRight);
 
     settingsButton.onClick    = [this] { onSettingsClicked(); };
     processButton.onClick     = [this] { onProcessClicked(); };
@@ -98,19 +94,14 @@ void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced (12);
 
-    // Top bar
-    auto topBar = area.removeFromTop (28);
-    settingsButton.setBounds (topBar.removeFromLeft (80));
-    titleLabel.setBounds (topBar);
-
-    area.removeFromTop (10);
+    // Credits at top
+    creditsComponent.setBounds (area.removeFromTop (20));
+    area.removeFromTop (6);
 
     // File drop area
     fileDropComponent.setBounds (area.removeFromTop (60));
 
-    area.removeFromTop (6);
-    creditsComponent.setBounds (area.removeFromTop (20));
-    area.removeFromTop (6);
+    area.removeFromTop (8);
 
     // Preset row
     auto presetRow = area.removeFromTop (26);
@@ -120,25 +111,27 @@ void MainComponent::resized()
 
     area.removeFromTop (8);
 
-    // Bottom: status + buttons (fixed)
-    auto bottomArea = area.removeFromBottom (32);
+    // Status at very bottom (no padding below)
+    statusComponent.setBounds (area.removeFromBottom (50));
+
+    // Buttons above status
+    area.removeFromBottom (8);
+    auto buttonArea = area.removeFromBottom (32);
+    settingsButton.setBounds (buttonArea.removeFromRight (32));
+    buttonArea.removeFromRight (8);
     auto buttonWidth = 120;
     auto totalButtonWidth = buttonWidth * 2 + 16;
-    auto startX = (bottomArea.getWidth() - totalButtonWidth) / 2;
-    processButton.setBounds (bottomArea.getX() + startX, bottomArea.getY(), buttonWidth, 32);
-    cancelButton.setBounds (bottomArea.getX() + startX + buttonWidth + 16, bottomArea.getY(), buttonWidth, 32);
+    auto startX = (buttonArea.getWidth() - totalButtonWidth) / 2;
+    processButton.setBounds (buttonArea.getX() + startX, buttonArea.getY(), buttonWidth, 32);
+    cancelButton.setBounds (buttonArea.getX() + startX + buttonWidth + 16, buttonArea.getY(), buttonWidth, 32);
 
-    area.removeFromBottom (10);
-    statusComponent.setBounds (area.removeFromBottom (50));
     area.removeFromBottom (8);
 
     // Manual options in viewport (fills remaining space)
     optionsViewport.setBounds (area);
 
-    // Size the manual options component to viewport width, tall enough for content
-    // Use a generous height — the viewport will clip & scroll as needed
     int vpWidth = optionsViewport.getMaximumVisibleWidth();
-    manualOptionsComponent.setSize (vpWidth, 600);
+    manualOptionsComponent.setSize (vpWidth, manualOptionsComponent.getRequiredHeight());
 }
 
 void MainComponent::setFile (const juce::File& file)

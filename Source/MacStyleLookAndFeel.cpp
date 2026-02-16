@@ -47,6 +47,7 @@ MacStyleLookAndFeel::MacStyleLookAndFeel()
 
     // Labels
     setColour (juce::Label::textColourId, textColour);
+    setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
 
     // ProgressBar
     setColour (juce::ProgressBar::backgroundColourId, surfaceColour);
@@ -199,9 +200,10 @@ void MacStyleLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width,
 {
     auto bounds = juce::Rectangle<float> (0, 0, (float) width, (float) height);
 
-    g.setColour (findColour (juce::PopupMenu::backgroundColourId));
-    g.fillRoundedRectangle (bounds.reduced (1), 8.0f);
+    // Fill entire area to eliminate default white window background
+    g.fillAll (findColour (juce::PopupMenu::backgroundColourId));
 
+    // Draw rounded border on top
     g.setColour (borderColour);
     g.drawRoundedRectangle (bounds.reduced (1), 8.0f, 0.5f);
 }
@@ -237,9 +239,11 @@ void MacStyleLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rect
 
     if (isTicked)
     {
-        auto checkArea = textArea.removeFromLeft (18);
-        g.drawText (juce::String::charToString (0x2713), checkArea,
-                    juce::Justification::centred);
+        auto checkArea = textArea.removeFromLeft (20);
+        auto dotSize = 6.0f;
+        auto dotX = checkArea.getCentreX() - dotSize / 2.0f;
+        auto dotY = checkArea.getCentreY() - dotSize / 2.0f;
+        g.fillEllipse (dotX, dotY, dotSize, dotSize);
     }
 
     g.setFont (systemFont);
@@ -317,6 +321,14 @@ void MacStyleLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
 }
 
 // ── Fonts ──
+
+juce::Label* MacStyleLookAndFeel::createComboBoxTextBox (juce::ComboBox&)
+{
+    auto* label = new juce::Label ({}, {});
+    label->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
+    label->setColour (juce::Label::outlineWhenEditingColourId, juce::Colours::transparentBlack);
+    return label;
+}
 
 juce::Font MacStyleLookAndFeel::getComboBoxFont (juce::ComboBox&)
 {

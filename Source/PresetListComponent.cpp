@@ -2,7 +2,6 @@
 
 PresetListComponent::PresetListComponent()
 {
-    addAndMakeVisible (label);
     addAndMakeVisible (comboBox);
 
     comboBox.setTextWhenNothingSelected ("Select a preset...");
@@ -21,9 +20,7 @@ PresetListComponent::PresetListComponent()
 
 void PresetListComponent::resized()
 {
-    auto area = getLocalBounds();
-    label.setBounds (area.removeFromLeft (60));
-    comboBox.setBounds (area);
+    comboBox.setBounds (getLocalBounds());
 }
 
 void PresetListComponent::setPresets (const juce::Array<AuphonicPreset>& presets)

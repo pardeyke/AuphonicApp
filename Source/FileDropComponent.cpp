@@ -3,11 +3,6 @@
 FileDropComponent::FileDropComponent()
 {
     addAndMakeVisible (chooseFileButton);
-    addAndMakeVisible (fileLabel);
-
-    fileLabel.setFont (juce::FontOptions (13.0f));
-    fileLabel.setColour (juce::Label::textColourId,
-                        findColour (juce::Label::textColourId).withAlpha (0.8f));
 
     chooseFileButton.onClick = [this]
     {
@@ -28,27 +23,33 @@ FileDropComponent::FileDropComponent()
 void FileDropComponent::paint (juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat().reduced (1.0f);
+    auto cornerSize = 8.0f;
 
     auto accent = findColour (juce::TextButton::buttonOnColourId);
     auto textCol = findColour (juce::Label::textColourId);
 
     g.setColour (isDraggingOver ? accent.withAlpha (0.15f)
                                 : textCol.withAlpha (0.05f));
-    g.fillRoundedRectangle (bounds, 6.0f);
+    g.fillRoundedRectangle (bounds, cornerSize);
 
     g.setColour (isDraggingOver ? accent : textCol.withAlpha (0.3f));
-    float dashLengths[] = { 6.0f, 4.0f };
-    g.drawDashedLine (juce::Line<float> (bounds.getTopLeft(), bounds.getTopRight()), dashLengths, 2, 1.0f);
-    g.drawDashedLine (juce::Line<float> (bounds.getTopRight(), bounds.getBottomRight()), dashLengths, 2, 1.0f);
-    g.drawDashedLine (juce::Line<float> (bounds.getBottomRight(), bounds.getBottomLeft()), dashLengths, 2, 1.0f);
-    g.drawDashedLine (juce::Line<float> (bounds.getBottomLeft(), bounds.getTopLeft()), dashLengths, 2, 1.0f);
+    g.drawRoundedRectangle (bounds, cornerSize, 1.0f);
+
+    auto textArea = bounds.reduced (10, 0).withTrimmedRight (116);
 
     if (currentFile == juce::File())
     {
         g.setColour (textCol.withAlpha (0.5f));
         g.setFont (juce::FontOptions (14.0f));
-        g.drawText ("Drop audio file here", bounds.reduced (10, 0).withTrimmedRight (120),
+        g.drawText ("Drop audio file here", textArea.toNearestInt(),
                      juce::Justification::centredLeft);
+    }
+    else
+    {
+        g.setColour (textCol.withAlpha (0.8f));
+        g.setFont (juce::FontOptions (12.0f));
+        g.drawFittedText (currentFile.getFullPathName(), textArea.toNearestInt(),
+                          juce::Justification::centredLeft, 3);
     }
 }
 
@@ -56,10 +57,6 @@ void FileDropComponent::resized()
 {
     auto area = getLocalBounds().reduced (8);
     chooseFileButton.setBounds (area.removeFromRight (100).withSizeKeepingCentre (100, 26));
-    area.removeFromRight (8);
-
-    if (currentFile != juce::File())
-        fileLabel.setBounds (area);
 }
 
 bool FileDropComponent::isInterestedInFileDrag (const juce::StringArray& files)
@@ -100,8 +97,6 @@ void FileDropComponent::fileDragExit (const juce::StringArray&)
 void FileDropComponent::setFile (const juce::File& file)
 {
     currentFile = file;
-    fileLabel.setText ("File: " + file.getFullPathName(), juce::dontSendNotification);
-    resized();
     repaint();
 
     if (onFileSelected)
