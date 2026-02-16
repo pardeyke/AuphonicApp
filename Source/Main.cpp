@@ -1,6 +1,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "MainComponent.h"
+#include "MacStyleLookAndFeel.h"
 
 class AuphonicAppApplication : public juce::JUCEApplication
 {
@@ -11,6 +12,9 @@ public:
 
     void initialise (const juce::String& commandLine) override
     {
+        lookAndFeel = std::make_unique<MacStyleLookAndFeel>();
+        juce::LookAndFeel::setDefaultLookAndFeel (lookAndFeel.get());
+
         juce::File initialFile;
 
         auto args = juce::StringArray::fromTokens (commandLine, true);
@@ -31,6 +35,8 @@ public:
     void shutdown() override
     {
         mainWindow = nullptr;
+        juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+        lookAndFeel = nullptr;
     }
 
     void systemRequestedQuit() override
@@ -81,6 +87,7 @@ public:
     };
 
 private:
+    std::unique_ptr<MacStyleLookAndFeel> lookAndFeel;
     std::unique_ptr<MainWindow> mainWindow;
 };
 

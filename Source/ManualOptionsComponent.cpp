@@ -3,8 +3,8 @@
 ManualOptionsComponent::ManualOptionsComponent()
 {
     addAndMakeVisible (separatorLabel);
-    separatorLabel.setFont (juce::FontOptions (12.0f));
-    separatorLabel.setColour (juce::Label::textColourId, juce::Colours::grey);
+    separatorLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+    separatorLabel.setColour (juce::Label::textColourId, juce::Colour (0xff8e8e93));
     separatorLabel.setJustificationType (juce::Justification::centredLeft);
 
     // ── Adaptive Leveler ──

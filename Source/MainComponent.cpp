@@ -17,7 +17,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     optionsViewport.setViewedComponent (&manualOptionsComponent, false);
     optionsViewport.setScrollBarsShown (true, false);
 
-    titleLabel.setFont (juce::FontOptions (18.0f, juce::Font::bold));
+    titleLabel.setFont (juce::FontOptions (16.0f, juce::Font::bold));
     titleLabel.setJustificationType (juce::Justification::centredRight);
 
     settingsButton.onClick    = [this] { onSettingsClicked(); };

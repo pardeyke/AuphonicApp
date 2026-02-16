@@ -6,7 +6,8 @@ FileDropComponent::FileDropComponent()
     addAndMakeVisible (fileLabel);
 
     fileLabel.setFont (juce::FontOptions (13.0f));
-    fileLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.8f));
+    fileLabel.setColour (juce::Label::textColourId,
+                        findColour (juce::Label::textColourId).withAlpha (0.8f));
 
     chooseFileButton.onClick = [this]
     {
@@ -28,11 +29,14 @@ void FileDropComponent::paint (juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat().reduced (1.0f);
 
-    g.setColour (isDraggingOver ? juce::Colours::lightblue.withAlpha (0.15f)
-                                : juce::Colours::white.withAlpha (0.05f));
+    auto accent = findColour (juce::TextButton::buttonOnColourId);
+    auto textCol = findColour (juce::Label::textColourId);
+
+    g.setColour (isDraggingOver ? accent.withAlpha (0.15f)
+                                : textCol.withAlpha (0.05f));
     g.fillRoundedRectangle (bounds, 6.0f);
 
-    g.setColour (isDraggingOver ? juce::Colours::lightblue : juce::Colours::white.withAlpha (0.3f));
+    g.setColour (isDraggingOver ? accent : textCol.withAlpha (0.3f));
     float dashLengths[] = { 6.0f, 4.0f };
     g.drawDashedLine (juce::Line<float> (bounds.getTopLeft(), bounds.getTopRight()), dashLengths, 2, 1.0f);
     g.drawDashedLine (juce::Line<float> (bounds.getTopRight(), bounds.getBottomRight()), dashLengths, 2, 1.0f);
@@ -41,7 +45,7 @@ void FileDropComponent::paint (juce::Graphics& g)
 
     if (currentFile == juce::File())
     {
-        g.setColour (juce::Colours::white.withAlpha (0.5f));
+        g.setColour (textCol.withAlpha (0.5f));
         g.setFont (juce::FontOptions (14.0f));
         g.drawText ("Drop audio file here", bounds.reduced (10, 0).withTrimmedRight (120),
                      juce::Justification::centredLeft);

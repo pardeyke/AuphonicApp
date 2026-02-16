@@ -32,6 +32,7 @@ target_sources(AuphonicApp PRIVATE
     Source/StatusComponent.cpp
     Source/FileDropComponent.cpp
     Source/CreditsComponent.cpp
+    Source/MacStyleLookAndFeel.cpp
 )
 
 target_compile_definitions(AuphonicApp PRIVATE
