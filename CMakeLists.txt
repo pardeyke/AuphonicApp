@@ -18,8 +18,8 @@ juce_add_gui_app(AuphonicApp
     PRODUCT_NAME "AuphonicApp"
     BUNDLE_ID "com.auphonic.app"
     COMPANY_NAME "Auphonic"
-    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Packaging/icon_1024.png"
-    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Packaging/icon_1024.png"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Packaging/icon.png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Packaging/icon.png"
 )
 
 target_sources(AuphonicApp PRIVATE
