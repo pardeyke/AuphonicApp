@@ -34,6 +34,28 @@ MainComponent::MainComponent (const juce::File& initialFile)
     };
     presetListComponent.onSelectionChanged = [this]
     {
+        auto uuid = presetListComponent.getSelectedPresetUuid();
+        if (uuid.isNotEmpty())
+        {
+            apiClient->fetchPresetDetails (uuid, [this] (bool success, const juce::var& algorithms)
+            {
+                if (success)
+                    manualOptionsComponent.applyApiSettings (algorithms);
+                saveCurrentConfig();
+                updateButtonStates();
+            });
+        }
+        else
+        {
+            saveCurrentConfig();
+            updateButtonStates();
+        }
+    };
+
+    manualOptionsComponent.onChange = [this]
+    {
+        if (presetListComponent.hasSelection() || presetListComponent.getBasePresetUuid().isNotEmpty())
+            presetListComponent.setModified (true);
         saveCurrentConfig();
         updateButtonStates();
     };
@@ -151,7 +173,8 @@ void MainComponent::onProcessClicked()
         return;
     }
 
-    auto presetUuid = presetListComponent.getSelectedPresetUuid();
+    // Use preset UUID only if unmodified; otherwise send manual settings
+    auto presetUuid = presetListComponent.getSelectedPresetUuid(); // empty if modified or no preset
     juce::var manualSettings;
 
     if (presetUuid.isEmpty())
@@ -202,8 +225,10 @@ void MainComponent::refreshPresets()
 
 void MainComponent::onSavePresetClicked()
 {
+    auto defaultName = presetListComponent.getBasePresetName();
+
     auto* aw = new juce::AlertWindow ("Save Preset", "Enter a name for this preset:", juce::MessageBoxIconType::QuestionIcon);
-    aw->addTextEditor ("name", "", "Preset name:");
+    aw->addTextEditor ("name", defaultName, "Preset name:");
     aw->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
     aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 
@@ -235,7 +260,11 @@ void MainComponent::onSavePresetClicked()
 
 void MainComponent::saveCurrentConfig()
 {
-    settingsManager.setLastPresetUuid (presetListComponent.getSelectedPresetUuid());
+    // Save the base preset UUID (even if modified, so we can restore it)
+    auto uuid = presetListComponent.getBasePresetUuid();
+    if (uuid.isEmpty())
+        uuid = presetListComponent.getSelectedPresetUuid();
+    settingsManager.setLastPresetUuid (uuid);
 
     auto widgetState = manualOptionsComponent.getWidgetState();
     settingsManager.setLastManualSettings (juce::JSON::toString (widgetState));
@@ -261,9 +290,9 @@ void MainComponent::updateButtonStates()
     cancelButton.setEnabled (! isIdle);
 
     bool canSavePreset = isIdle
-        && ! presetListComponent.hasSelection()
         && manualOptionsComponent.hasAnyEnabled()
-        && settingsManager.hasApiToken();
+        && settingsManager.hasApiToken()
+        && (presetListComponent.isModified() || ! presetListComponent.hasSelection());
     savePresetButton.setEnabled (canSavePreset);
 }
 

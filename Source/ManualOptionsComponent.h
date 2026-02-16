@@ -15,7 +15,13 @@ public:
     juce::var getWidgetState() const;
     void applyWidgetState (const juce::var& state);
 
+    void applyApiSettings (const juce::var& algorithms);
+
+    std::function<void()> onChange;
+
 private:
+    void notifyChange();
+    bool suppressCallbacks = false;
     void populateDbCombo (juce::ComboBox& combo, bool offByDefault);
     void populateStrengthCombo (juce::ComboBox& combo);
     void populateCompressorCombo (juce::ComboBox& combo);
@@ -26,7 +32,7 @@ private:
     static constexpr int gap = 4;
     static constexpr int indent = 24;
 
-    juce::Label separatorLabel { {}, "-- OR configure manually --" };
+    juce::Label separatorLabel { {}, "Settings:" };
 
     // --- Adaptive Leveler ---
     juce::ToggleButton levelerToggle { "Adaptive Leveler" };

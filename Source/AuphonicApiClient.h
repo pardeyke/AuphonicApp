@@ -38,6 +38,9 @@ public:
     using PresetsCallback = std::function<void (bool success, const juce::Array<AuphonicPreset>& presets)>;
     void fetchPresets (PresetsCallback callback);
 
+    using PresetDetailsCallback = std::function<void (bool success, const juce::var& algorithms)>;
+    void fetchPresetDetails (const juce::String& uuid, PresetDetailsCallback callback);
+
     using SavePresetCallback = std::function<void (bool success, const juce::String& uuid, const juce::String& error)>;
     void savePreset (const juce::String& name,
                      const juce::var& settings,

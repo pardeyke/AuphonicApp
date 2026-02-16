@@ -100,6 +100,30 @@ void AuphonicApiClient::fetchPresets (PresetsCallback callback)
     });
 }
 
+void AuphonicApiClient::fetchPresetDetails (const juce::String& uuid,
+                                              PresetDetailsCallback callback)
+{
+    juce::Thread::launch ([this, uuid, callback]
+    {
+        int statusCode = 0;
+        auto url = makeUrl ("/preset/" + uuid + ".json");
+        auto response = performGet (url, statusCode);
+
+        juce::var algorithms;
+        bool success = false;
+
+        if (statusCode == 200)
+        {
+            auto json = juce::JSON::parse (response);
+            algorithms = json.getProperty ("data", juce::var())
+                              .getProperty ("algorithms", juce::var());
+            success = true;
+        }
+
+        juce::MessageManager::callAsync ([callback, success, algorithms] { callback (success, algorithms); });
+    });
+}
+
 void AuphonicApiClient::savePreset (const juce::String& name,
                                      const juce::var& settings,
                                      SavePresetCallback callback)

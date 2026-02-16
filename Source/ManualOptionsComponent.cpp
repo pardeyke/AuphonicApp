@@ -5,24 +5,26 @@ ManualOptionsComponent::ManualOptionsComponent()
     addAndMakeVisible (separatorLabel);
     separatorLabel.setFont (juce::FontOptions (12.0f));
     separatorLabel.setColour (juce::Label::textColourId, juce::Colours::grey);
-    separatorLabel.setJustificationType (juce::Justification::centred);
+    separatorLabel.setJustificationType (juce::Justification::centredLeft);
 
     // ── Adaptive Leveler ──
     addAndMakeVisible (levelerToggle);
     levelerToggle.setToggleState (true, juce::dontSendNotification);
-    levelerToggle.onClick = [this] { updateDependentVisibility(); };
+    levelerToggle.onClick = [this] { updateDependentVisibility(); notifyChange(); };
 
     addAndMakeVisible (strengthLabel);
     addAndMakeVisible (strengthCombo);
     populateStrengthCombo (strengthCombo);
+    strengthCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (compressorLabel);
     addAndMakeVisible (compressorCombo);
     populateCompressorCombo (compressorCombo);
+    compressorCombo.onChange = [this] { notifyChange(); };
 
     // Separate Music/Speech
     addAndMakeVisible (separateMsToggle);
-    separateMsToggle.onClick = [this] { updateDependentVisibility(); };
+    separateMsToggle.onClick = [this] { updateDependentVisibility(); notifyChange(); };
 
     addAndMakeVisible (classifierLabel);
     addAndMakeVisible (classifierCombo);
@@ -30,30 +32,36 @@ ManualOptionsComponent::ManualOptionsComponent()
     classifierCombo.addItem ("Speech", 2);
     classifierCombo.addItem ("Music", 3);
     classifierCombo.setSelectedId (1, juce::dontSendNotification);
+    classifierCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (speechStrengthLabel);
     addAndMakeVisible (speechStrengthCombo);
     populateStrengthCombo (speechStrengthCombo);
+    speechStrengthCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (speechCompressorLabel);
     addAndMakeVisible (speechCompressorCombo);
     populateCompressorCombo (speechCompressorCombo);
+    speechCompressorCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (musicStrengthLabel);
     addAndMakeVisible (musicStrengthCombo);
     populateStrengthCombo (musicStrengthCombo);
+    musicStrengthCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (musicCompressorLabel);
     addAndMakeVisible (musicCompressorCombo);
     populateCompressorCombo (musicCompressorCombo);
+    musicCompressorCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (musicGainLabel);
     addAndMakeVisible (musicGainCombo);
     populateMusicGainCombo (musicGainCombo);
+    musicGainCombo.onChange = [this] { notifyChange(); };
 
     // Broadcast mode
     addAndMakeVisible (broadcastToggle);
-    broadcastToggle.onClick = [this] { updateDependentVisibility(); };
+    broadcastToggle.onClick = [this] { updateDependentVisibility(); notifyChange(); };
 
     addAndMakeVisible (maxLraLabel);
     addAndMakeVisible (maxLraCombo);
@@ -61,6 +69,7 @@ ManualOptionsComponent::ManualOptionsComponent()
     for (int v = 3; v <= 20; ++v)
         maxLraCombo.addItem (juce::String (v) + " LU", v + 10);
     maxLraCombo.setSelectedId (1, juce::dontSendNotification);
+    maxLraCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (maxSLabel);
     addAndMakeVisible (maxSCombo);
@@ -68,6 +77,7 @@ ManualOptionsComponent::ManualOptionsComponent()
     for (int v = 3; v <= 12; ++v)
         maxSCombo.addItem (juce::String (v) + " LU", v + 10);
     maxSCombo.setSelectedId (1, juce::dontSendNotification);
+    maxSCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (maxMLabel);
     addAndMakeVisible (maxMCombo);
@@ -75,11 +85,12 @@ ManualOptionsComponent::ManualOptionsComponent()
     for (int v = 8; v <= 20; ++v)
         maxMCombo.addItem (juce::String (v) + " LU", v + 10);
     maxMCombo.setSelectedId (1, juce::dontSendNotification);
+    maxMCombo.onChange = [this] { notifyChange(); };
 
     // ── Noise Reduction ──
     addAndMakeVisible (noiseToggle);
     noiseToggle.setToggleState (true, juce::dontSendNotification);
-    noiseToggle.onClick = [this] { updateDependentVisibility(); };
+    noiseToggle.onClick = [this] { updateDependentVisibility(); notifyChange(); };
 
     addAndMakeVisible (methodLabel);
     addAndMakeVisible (methodCombo);
@@ -88,24 +99,27 @@ ManualOptionsComponent::ManualOptionsComponent()
     methodCombo.addItem ("Speech Isolation", 3);
     methodCombo.addItem ("Static", 4);
     methodCombo.setSelectedId (1, juce::dontSendNotification);
-    methodCombo.onChange = [this] { updateDependentVisibility(); };
+    methodCombo.onChange = [this] { updateDependentVisibility(); notifyChange(); };
 
     addAndMakeVisible (noiseAmountLabel);
     addAndMakeVisible (noiseAmountCombo);
     populateDbCombo (noiseAmountCombo, false);
+    noiseAmountCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (reverbAmountLabel);
     addAndMakeVisible (reverbAmountCombo);
     populateDbCombo (reverbAmountCombo, false);
+    reverbAmountCombo.onChange = [this] { notifyChange(); };
 
     addAndMakeVisible (breathAmountLabel);
     addAndMakeVisible (breathAmountCombo);
     populateDbCombo (breathAmountCombo, true);
+    breathAmountCombo.onChange = [this] { notifyChange(); };
 
     // ── Filtering ──
     addAndMakeVisible (filterToggle);
     filterToggle.setToggleState (true, juce::dontSendNotification);
-    filterToggle.onClick = [this] { updateDependentVisibility(); };
+    filterToggle.onClick = [this] { updateDependentVisibility(); notifyChange(); };
 
     addAndMakeVisible (filterMethodLabel);
     addAndMakeVisible (filterMethodCombo);
@@ -113,9 +127,11 @@ ManualOptionsComponent::ManualOptionsComponent()
     filterMethodCombo.addItem ("Auto EQ", 2);
     filterMethodCombo.addItem ("Bandwidth Extension", 3);
     filterMethodCombo.setSelectedId (1, juce::dontSendNotification);
+    filterMethodCombo.onChange = [this] { notifyChange(); };
 
     // ── Loudness ──
     addAndMakeVisible (loudnessToggle);
+    loudnessToggle.onClick = [this] { notifyChange(); };
     addAndMakeVisible (loudnessTargetLabel);
     addAndMakeVisible (loudnessTargetCombo);
     loudnessTargetCombo.addItem ("-16 LUFS", 1);
@@ -123,6 +139,7 @@ ManualOptionsComponent::ManualOptionsComponent()
     loudnessTargetCombo.addItem ("-24 LUFS", 3);
     loudnessTargetCombo.addItem ("-14 LUFS", 4);
     loudnessTargetCombo.setSelectedId (1, juce::dontSendNotification);
+    loudnessTargetCombo.onChange = [this] { notifyChange(); };
 
     updateDependentVisibility();
 }
@@ -589,6 +606,8 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
     if (! state.isObject())
         return;
 
+    suppressCallbacks = true;
+
     auto setToggle = [&] (juce::ToggleButton& toggle, const juce::Identifier& key, bool defaultVal)
     {
         toggle.setToggleState ((bool) state.getProperty (key, defaultVal), juce::dontSendNotification);
@@ -626,5 +645,140 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
     setCombo (filterMethodCombo, "filterMethod", 1);
     setCombo (loudnessTargetCombo, "loudnessTarget", 1);
 
+    suppressCallbacks = false;
+    updateDependentVisibility();
+}
+
+void ManualOptionsComponent::notifyChange()
+{
+    if (! suppressCallbacks && onChange)
+        onChange();
+}
+
+// ── Reverse-map API algorithms to widget states ──
+
+static int apiValueToStrengthId (int pct)
+{
+    // API value 0-100, id = 101 - value  (id 1 = 100%, id 11 = 0%)
+    pct = juce::jlimit (0, 100, pct);
+    return 101 - (pct / 10) * 10;  // snap to nearest 10
+}
+
+static int apiValueToCompressorId (const juce::String& val)
+{
+    if (val == "soft")   return 2;
+    if (val == "medium") return 3;
+    if (val == "hard")   return 4;
+    if (val == "off")    return 5;
+    return 1; // auto
+}
+
+static int apiValueToDbId (int val)
+{
+    // values[] = { -1, 0, 3, 6, 9, 12, 15, 18, 24, 30, 36 }  → id 1..11
+    static const int values[] = { -1, 0, 3, 6, 9, 12, 15, 18, 24, 30, 36 };
+    for (int i = 0; i < 11; ++i)
+        if (values[i] == val)
+            return i + 1;
+    return 1; // Off
+}
+
+static int apiValueToLuId (int val)
+{
+    if (val == 0) return 1; // Auto
+    return val + 10;
+}
+
+void ManualOptionsComponent::applyApiSettings (const juce::var& algorithms)
+{
+    suppressCallbacks = true;
+
+    // ── Adaptive Leveler ──
+    bool hasLeveler = (bool) algorithms.getProperty ("leveler", false);
+    levelerToggle.setToggleState (hasLeveler, juce::dontSendNotification);
+
+    bool hasMsClassifier = algorithms.hasProperty ("msclassifier");
+    separateMsToggle.setToggleState (hasMsClassifier, juce::dontSendNotification);
+
+    bool hasBroadcast = algorithms.hasProperty ("maxlra")
+                     || algorithms.hasProperty ("maxs")
+                     || algorithms.hasProperty ("maxm");
+    broadcastToggle.setToggleState (hasBroadcast, juce::dontSendNotification);
+
+    if (hasMsClassifier)
+    {
+        auto cls = algorithms.getProperty ("msclassifier", "on").toString();
+        if (cls == "speech")     classifierCombo.setSelectedId (2, juce::dontSendNotification);
+        else if (cls == "music") classifierCombo.setSelectedId (3, juce::dontSendNotification);
+        else                     classifierCombo.setSelectedId (1, juce::dontSendNotification);
+
+        speechStrengthCombo.setSelectedId (apiValueToStrengthId ((int) algorithms.getProperty ("levelerstrength_speech", 100)), juce::dontSendNotification);
+        musicStrengthCombo.setSelectedId (apiValueToStrengthId ((int) algorithms.getProperty ("levelerstrength_music", 100)), juce::dontSendNotification);
+        speechCompressorCombo.setSelectedId (apiValueToCompressorId (algorithms.getProperty ("compressor_speech", "auto").toString()), juce::dontSendNotification);
+        musicCompressorCombo.setSelectedId (apiValueToCompressorId (algorithms.getProperty ("compressor_music", "auto").toString()), juce::dontSendNotification);
+    }
+    else
+    {
+        strengthCombo.setSelectedId (apiValueToStrengthId ((int) algorithms.getProperty ("levelerstrength", 100)), juce::dontSendNotification);
+        compressorCombo.setSelectedId (apiValueToCompressorId (algorithms.getProperty ("compressor", "auto").toString()), juce::dontSendNotification);
+    }
+
+    if (algorithms.hasProperty ("musicgain"))
+        musicGainCombo.setSelectedId ((int) algorithms.getProperty ("musicgain", 0) + 7, juce::dontSendNotification);
+
+    if (hasBroadcast)
+    {
+        maxLraCombo.setSelectedId (apiValueToLuId ((int) algorithms.getProperty ("maxlra", 0)), juce::dontSendNotification);
+        maxSCombo.setSelectedId (apiValueToLuId ((int) algorithms.getProperty ("maxs", 0)), juce::dontSendNotification);
+        maxMCombo.setSelectedId (apiValueToLuId ((int) algorithms.getProperty ("maxm", 0)), juce::dontSendNotification);
+    }
+
+    // ── Noise Reduction ──
+    bool hasDenoise = (bool) algorithms.getProperty ("denoise", false);
+    noiseToggle.setToggleState (hasDenoise, juce::dontSendNotification);
+
+    if (hasDenoise)
+    {
+        auto method = algorithms.getProperty ("denoisemethod", "classic").toString();
+        if (method == "dynamic")               methodCombo.setSelectedId (2, juce::dontSendNotification);
+        else if (method == "speech_isolation")  methodCombo.setSelectedId (3, juce::dontSendNotification);
+        else if (method == "static")           methodCombo.setSelectedId (4, juce::dontSendNotification);
+        else                                   methodCombo.setSelectedId (1, juce::dontSendNotification);
+
+        noiseAmountCombo.setSelectedId (apiValueToDbId ((int) algorithms.getProperty ("denoiseamount", 0)), juce::dontSendNotification);
+
+        if (algorithms.hasProperty ("deverbamount"))
+            reverbAmountCombo.setSelectedId (apiValueToDbId ((int) algorithms.getProperty ("deverbamount", 0)), juce::dontSendNotification);
+
+        if (algorithms.hasProperty ("debreathamount"))
+            breathAmountCombo.setSelectedId (apiValueToDbId ((int) algorithms.getProperty ("debreathamount", -1)), juce::dontSendNotification);
+    }
+
+    // ── Filtering ──
+    bool hasFiltering = (bool) algorithms.getProperty ("filtering", false);
+    filterToggle.setToggleState (hasFiltering, juce::dontSendNotification);
+
+    if (hasFiltering)
+    {
+        auto fm = algorithms.getProperty ("filtermethod", "hipfilter").toString();
+        if (fm == "autoeq")      filterMethodCombo.setSelectedId (2, juce::dontSendNotification);
+        else if (fm == "bwe")    filterMethodCombo.setSelectedId (3, juce::dontSendNotification);
+        else                     filterMethodCombo.setSelectedId (1, juce::dontSendNotification);
+    }
+
+    // ── Loudness ──
+    bool hasLoudness = (bool) algorithms.getProperty ("normloudness", false);
+    loudnessToggle.setToggleState (hasLoudness, juce::dontSendNotification);
+
+    if (hasLoudness)
+    {
+        int target = juce::roundToInt ((double) algorithms.getProperty ("loudnesstarget", -16.0));
+        if (target == -23)      loudnessTargetCombo.setSelectedId (2, juce::dontSendNotification);
+        else if (target == -24) loudnessTargetCombo.setSelectedId (3, juce::dontSendNotification);
+        else if (target == -14) loudnessTargetCombo.setSelectedId (4, juce::dontSendNotification);
+        else                    loudnessTargetCombo.setSelectedId (1, juce::dontSendNotification);
+    }
+
+    suppressCallbacks = false;
     updateDependentVisibility();
 }
