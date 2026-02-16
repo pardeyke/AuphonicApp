@@ -282,6 +282,7 @@ void MainComponent::workflowCompleted()
 {
     statusComponent.setStatus ("Complete! File saved.");
     statusComponent.setProgress (1.0);
+    refreshCredits();
 
     juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon,
         "Success", "Processing complete. Output saved to:\n" + fileDropComponent.getFile().getFullPathName());
