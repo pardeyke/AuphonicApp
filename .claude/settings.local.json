@@ -4,7 +4,12 @@
       "WebSearch",
       "WebFetch(domain:auphonic.com)",
       "Bash(cmake:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(security find-identity:*)",
+      "Bash(chmod:*)",
+      "Bash(xxd:*)",
+      "Bash(python3:*)",
+      "Bash(swift:*)"
     ]
   }
 }
