@@ -33,9 +33,12 @@ private:
     void onSettingsClicked();
     void onProcessClicked();
     void onCancelClicked();
+    void onSavePresetClicked();
     void refreshPresets();
     void refreshCredits();
     void updateButtonStates();
+    void saveCurrentConfig();
+    void restoreLastConfig();
 
     SettingsManager settingsManager;
     std::unique_ptr<AuphonicApiClient> apiClient;
@@ -47,6 +50,7 @@ private:
     FileDropComponent fileDropComponent;
     CreditsComponent creditsComponent;
     PresetListComponent presetListComponent;
+    juce::TextButton savePresetButton { "Save Preset" };
     ManualOptionsComponent manualOptionsComponent;
     juce::Viewport optionsViewport;
     StatusComponent statusComponent;

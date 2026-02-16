@@ -100,6 +100,61 @@ void AuphonicApiClient::fetchPresets (PresetsCallback callback)
     });
 }
 
+void AuphonicApiClient::savePreset (const juce::String& name,
+                                     const juce::var& settings,
+                                     SavePresetCallback callback)
+{
+    juce::Thread::launch ([this, name, settings, callback]
+    {
+        auto json = std::make_unique<juce::DynamicObject>();
+        json->setProperty ("preset_name", name);
+
+        if (auto* settingsObj = settings.getDynamicObject())
+        {
+            if (auto* algorithms = settingsObj->getProperty ("algorithms").getDynamicObject())
+            {
+                auto algoCopy = std::make_unique<juce::DynamicObject> (*algorithms);
+                json->setProperty ("algorithms", juce::var (algoCopy.release()));
+            }
+        }
+
+        auto jsonString = juce::JSON::toString (juce::var (json.release()));
+
+        auto url = makeUrl ("/presets.json")
+            .withPOSTData (jsonString);
+
+        int statusCode = 0;
+        auto options = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
+            .withExtraHeaders ("Authorization: Bearer " + token + "\r\nContent-Type: application/json")
+            .withConnectionTimeoutMs (30000)
+            .withStatusCode (&statusCode);
+
+        juce::String response;
+        if (auto stream = url.createInputStream (options))
+            response = stream->readEntireStreamAsString();
+
+        juce::String uuid, error;
+        bool success = false;
+
+        if (statusCode == 200 || statusCode == 201)
+        {
+            auto parsed = juce::JSON::parse (response);
+            uuid = parsed.getProperty ("data", juce::var())
+                         .getProperty ("uuid", "").toString();
+            success = uuid.isNotEmpty();
+            if (! success)
+                error = "No UUID in response";
+        }
+        else
+        {
+            auto parsed = juce::JSON::parse (response);
+            error = parsed.getProperty ("error_message", "HTTP " + juce::String (statusCode)).toString();
+        }
+
+        juce::MessageManager::callAsync ([callback, success, uuid, error] { callback (success, uuid, error); });
+    });
+}
+
 void AuphonicApiClient::createProduction (const juce::String& presetUuid,
                                            const juce::var& manualSettings,
                                            ProductionCallback callback)

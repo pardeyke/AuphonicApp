@@ -549,3 +549,82 @@ bool ManualOptionsComponent::hasAnyEnabled() const
         || filterToggle.getToggleState()
         || loudnessToggle.getToggleState();
 }
+
+juce::var ManualOptionsComponent::getWidgetState() const
+{
+    auto state = std::make_unique<juce::DynamicObject>();
+
+    // Toggles
+    state->setProperty ("leveler", levelerToggle.getToggleState());
+    state->setProperty ("separateMs", separateMsToggle.getToggleState());
+    state->setProperty ("broadcast", broadcastToggle.getToggleState());
+    state->setProperty ("noise", noiseToggle.getToggleState());
+    state->setProperty ("filter", filterToggle.getToggleState());
+    state->setProperty ("loudness", loudnessToggle.getToggleState());
+
+    // Combos
+    state->setProperty ("strength", strengthCombo.getSelectedId());
+    state->setProperty ("compressor", compressorCombo.getSelectedId());
+    state->setProperty ("classifier", classifierCombo.getSelectedId());
+    state->setProperty ("speechStrength", speechStrengthCombo.getSelectedId());
+    state->setProperty ("speechCompressor", speechCompressorCombo.getSelectedId());
+    state->setProperty ("musicStrength", musicStrengthCombo.getSelectedId());
+    state->setProperty ("musicCompressor", musicCompressorCombo.getSelectedId());
+    state->setProperty ("musicGain", musicGainCombo.getSelectedId());
+    state->setProperty ("maxLra", maxLraCombo.getSelectedId());
+    state->setProperty ("maxS", maxSCombo.getSelectedId());
+    state->setProperty ("maxM", maxMCombo.getSelectedId());
+    state->setProperty ("method", methodCombo.getSelectedId());
+    state->setProperty ("noiseAmount", noiseAmountCombo.getSelectedId());
+    state->setProperty ("reverbAmount", reverbAmountCombo.getSelectedId());
+    state->setProperty ("breathAmount", breathAmountCombo.getSelectedId());
+    state->setProperty ("filterMethod", filterMethodCombo.getSelectedId());
+    state->setProperty ("loudnessTarget", loudnessTargetCombo.getSelectedId());
+
+    return juce::var (state.release());
+}
+
+void ManualOptionsComponent::applyWidgetState (const juce::var& state)
+{
+    if (! state.isObject())
+        return;
+
+    auto setToggle = [&] (juce::ToggleButton& toggle, const juce::Identifier& key, bool defaultVal)
+    {
+        toggle.setToggleState ((bool) state.getProperty (key, defaultVal), juce::dontSendNotification);
+    };
+
+    auto setCombo = [&] (juce::ComboBox& combo, const juce::Identifier& key, int defaultId)
+    {
+        int id = (int) state.getProperty (key, defaultId);
+        if (id > 0)
+            combo.setSelectedId (id, juce::dontSendNotification);
+    };
+
+    setToggle (levelerToggle, "leveler", true);
+    setToggle (separateMsToggle, "separateMs", false);
+    setToggle (broadcastToggle, "broadcast", false);
+    setToggle (noiseToggle, "noise", true);
+    setToggle (filterToggle, "filter", true);
+    setToggle (loudnessToggle, "loudness", false);
+
+    setCombo (strengthCombo, "strength", 1);
+    setCombo (compressorCombo, "compressor", 1);
+    setCombo (classifierCombo, "classifier", 1);
+    setCombo (speechStrengthCombo, "speechStrength", 1);
+    setCombo (speechCompressorCombo, "speechCompressor", 1);
+    setCombo (musicStrengthCombo, "musicStrength", 1);
+    setCombo (musicCompressorCombo, "musicCompressor", 1);
+    setCombo (musicGainCombo, "musicGain", 7);
+    setCombo (maxLraCombo, "maxLra", 1);
+    setCombo (maxSCombo, "maxS", 1);
+    setCombo (maxMCombo, "maxM", 1);
+    setCombo (methodCombo, "method", 1);
+    setCombo (noiseAmountCombo, "noiseAmount", 2);
+    setCombo (reverbAmountCombo, "reverbAmount", 2);
+    setCombo (breathAmountCombo, "breathAmount", 1);
+    setCombo (filterMethodCombo, "filterMethod", 1);
+    setCombo (loudnessTargetCombo, "loudnessTarget", 1);
+
+    updateDependentVisibility();
+}

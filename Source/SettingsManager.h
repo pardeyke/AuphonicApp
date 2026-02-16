@@ -11,6 +11,12 @@ public:
     void setApiToken (const juce::String& token);
     bool hasApiToken() const;
 
+    juce::String getLastPresetUuid() const;
+    void setLastPresetUuid (const juce::String& uuid);
+
+    juce::String getLastManualSettings() const;
+    void setLastManualSettings (const juce::String& jsonString);
+
 private:
     std::unique_ptr<juce::ApplicationProperties> appProperties;
 

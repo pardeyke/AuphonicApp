@@ -13,6 +13,7 @@ public:
     void setPresets (const juce::Array<AuphonicPreset>& presets);
     juce::String getSelectedPresetUuid() const;
     bool hasSelection() const;
+    void setSelectedUuid (const juce::String& uuid);
 
     std::function<void()> onSelectionChanged;
 

@@ -32,3 +32,35 @@ bool SettingsManager::hasApiToken() const
 {
     return getApiToken().isNotEmpty();
 }
+
+juce::String SettingsManager::getLastPresetUuid() const
+{
+    if (auto* props = appProperties->getUserSettings())
+        return props->getValue ("lastPresetUuid", "");
+    return {};
+}
+
+void SettingsManager::setLastPresetUuid (const juce::String& uuid)
+{
+    if (auto* props = appProperties->getUserSettings())
+    {
+        props->setValue ("lastPresetUuid", uuid);
+        props->saveIfNeeded();
+    }
+}
+
+juce::String SettingsManager::getLastManualSettings() const
+{
+    if (auto* props = appProperties->getUserSettings())
+        return props->getValue ("lastManualSettings", "");
+    return {};
+}
+
+void SettingsManager::setLastManualSettings (const juce::String& jsonString)
+{
+    if (auto* props = appProperties->getUserSettings())
+    {
+        props->setValue ("lastManualSettings", jsonString);
+        props->saveIfNeeded();
+    }
+}

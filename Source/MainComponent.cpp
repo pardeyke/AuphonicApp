@@ -8,6 +8,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     addAndMakeVisible (fileDropComponent);
     addAndMakeVisible (creditsComponent);
     addAndMakeVisible (presetListComponent);
+    addAndMakeVisible (savePresetButton);
     addAndMakeVisible (optionsViewport);
     addAndMakeVisible (statusComponent);
     addAndMakeVisible (processButton);
@@ -19,9 +20,10 @@ MainComponent::MainComponent (const juce::File& initialFile)
     titleLabel.setFont (juce::FontOptions (18.0f, juce::Font::bold));
     titleLabel.setJustificationType (juce::Justification::centredRight);
 
-    settingsButton.onClick = [this] { onSettingsClicked(); };
-    processButton.onClick  = [this] { onProcessClicked(); };
-    cancelButton.onClick   = [this] { onCancelClicked(); };
+    settingsButton.onClick    = [this] { onSettingsClicked(); };
+    processButton.onClick     = [this] { onProcessClicked(); };
+    cancelButton.onClick      = [this] { onCancelClicked(); };
+    savePresetButton.onClick  = [this] { onSavePresetClicked(); };
 
     cancelButton.setEnabled (false);
 
@@ -30,7 +32,11 @@ MainComponent::MainComponent (const juce::File& initialFile)
         creditsComponent.setFile (f);
         updateButtonStates();
     };
-    presetListComponent.onSelectionChanged = [this] { updateButtonStates(); };
+    presetListComponent.onSelectionChanged = [this]
+    {
+        saveCurrentConfig();
+        updateButtonStates();
+    };
 
     // Init API client
     apiClient = std::make_unique<AuphonicApiClient> (settingsManager.getApiToken());
@@ -42,6 +48,9 @@ MainComponent::MainComponent (const juce::File& initialFile)
         fileDropComponent.setFile (initialFile);
         creditsComponent.setFile (initialFile);
     }
+
+    // Restore manual settings before presets load (presets restore happens in refreshPresets callback)
+    restoreLastConfig();
 
     if (settingsManager.hasApiToken())
     {
@@ -81,8 +90,11 @@ void MainComponent::resized()
     creditsComponent.setBounds (area.removeFromTop (20));
     area.removeFromTop (6);
 
-    // Preset
-    presetListComponent.setBounds (area.removeFromTop (26));
+    // Preset row
+    auto presetRow = area.removeFromTop (26);
+    savePresetButton.setBounds (presetRow.removeFromRight (90));
+    presetRow.removeFromRight (6);
+    presetListComponent.setBounds (presetRow);
 
     area.removeFromTop (8);
 
@@ -153,6 +165,7 @@ void MainComponent::onProcessClicked()
         manualSettings = manualOptionsComponent.getSettings();
     }
 
+    saveCurrentConfig();
     workflow->start (file, presetUuid, manualSettings);
 }
 
@@ -177,8 +190,65 @@ void MainComponent::refreshPresets()
     apiClient->fetchPresets ([this] (bool success, const juce::Array<AuphonicPreset>& presets)
     {
         if (success)
+        {
             presetListComponent.setPresets (presets);
+
+            auto lastUuid = settingsManager.getLastPresetUuid();
+            presetListComponent.setSelectedUuid (lastUuid);
+            updateButtonStates();
+        }
     });
+}
+
+void MainComponent::onSavePresetClicked()
+{
+    auto* aw = new juce::AlertWindow ("Save Preset", "Enter a name for this preset:", juce::MessageBoxIconType::QuestionIcon);
+    aw->addTextEditor ("name", "", "Preset name:");
+    aw->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw] (int result)
+    {
+        auto name = aw->getTextEditorContents ("name").trim();
+        delete aw;
+
+        if (result == 0 || name.isEmpty())
+            return;
+
+        auto settings = manualOptionsComponent.getSettings();
+
+        apiClient->savePreset (name, settings, [this] (bool success, const juce::String& /*uuid*/, const juce::String& error)
+        {
+            if (success)
+            {
+                refreshPresets();
+                statusComponent.setStatus ("Preset saved.");
+            }
+            else
+            {
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                    "Save Failed", error);
+            }
+        });
+    }));
+}
+
+void MainComponent::saveCurrentConfig()
+{
+    settingsManager.setLastPresetUuid (presetListComponent.getSelectedPresetUuid());
+
+    auto widgetState = manualOptionsComponent.getWidgetState();
+    settingsManager.setLastManualSettings (juce::JSON::toString (widgetState));
+}
+
+void MainComponent::restoreLastConfig()
+{
+    auto manualJson = settingsManager.getLastManualSettings();
+    if (manualJson.isNotEmpty())
+    {
+        auto parsed = juce::JSON::parse (manualJson);
+        manualOptionsComponent.applyWidgetState (parsed);
+    }
 }
 
 void MainComponent::updateButtonStates()
@@ -189,6 +259,12 @@ void MainComponent::updateButtonStates()
 
     processButton.setEnabled (isIdle && fileDropComponent.getFile().existsAsFile());
     cancelButton.setEnabled (! isIdle);
+
+    bool canSavePreset = isIdle
+        && ! presetListComponent.hasSelection()
+        && manualOptionsComponent.hasAnyEnabled()
+        && settingsManager.hasApiToken();
+    savePresetButton.setEnabled (canSavePreset);
 }
 
 void MainComponent::workflowStateChanged (ProcessingWorkflow::State)

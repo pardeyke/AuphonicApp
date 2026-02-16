@@ -12,6 +12,9 @@ public:
     juce::var getSettings() const;
     bool hasAnyEnabled() const;
 
+    juce::var getWidgetState() const;
+    void applyWidgetState (const juce::var& state);
+
 private:
     void populateDbCombo (juce::ComboBox& combo, bool offByDefault);
     void populateStrengthCombo (juce::ComboBox& combo);
