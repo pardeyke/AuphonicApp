@@ -32,7 +32,7 @@ public:
     explicit AuphonicApiClient (const juce::String& apiToken);
     void setToken (const juce::String& token);
 
-    using UserInfoCallback = std::function<void (bool success, const UserCredits& credits)>;
+    using UserInfoCallback = std::function<void (bool success, int httpStatus, const UserCredits& credits)>;
     void fetchUserInfo (UserInfoCallback callback);
 
     using PresetsCallback = std::function<void (bool success, const juce::Array<AuphonicPreset>& presets)>;

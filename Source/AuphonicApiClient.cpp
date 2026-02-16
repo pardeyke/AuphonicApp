@@ -63,7 +63,7 @@ void AuphonicApiClient::fetchUserInfo (UserInfoCallback callback)
             success = true;
         }
 
-        juce::MessageManager::callAsync ([callback, success, credits] { callback (success, credits); });
+        juce::MessageManager::callAsync ([callback, success, statusCode, credits] { callback (success, statusCode, credits); });
     });
 }
 

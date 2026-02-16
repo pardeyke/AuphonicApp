@@ -72,8 +72,28 @@ MainComponent::MainComponent (const juce::File& initialFile)
 
     if (settingsManager.hasApiToken())
     {
-        refreshPresets();
-        refreshCredits();
+        statusComponent.setStatus ("Connecting...");
+        apiClient->fetchUserInfo ([this] (bool success, int httpStatus, const UserCredits& credits)
+        {
+            if (success)
+            {
+                creditsComponent.setCredits (credits);
+                statusComponent.setStatus ("Ready.");
+                refreshPresets();
+            }
+            else if (httpStatus == 401 || httpStatus == 403)
+            {
+                statusComponent.setStatus ("Invalid API token. Please check Settings.");
+            }
+            else
+            {
+                statusComponent.setStatus ("Connection failed. Check your internet.");
+            }
+        });
+    }
+    else
+    {
+        statusComponent.setStatus ("No API token. Please configure in Settings.");
     }
 
     updateButtonStates();
@@ -144,8 +164,32 @@ void MainComponent::onSettingsClicked()
     SettingsComponent::showDialog (settingsManager, this, [this]
     {
         apiClient->setToken (settingsManager.getApiToken());
-        refreshPresets();
-        refreshCredits();
+
+        if (settingsManager.hasApiToken())
+        {
+            statusComponent.setStatus ("Connecting...");
+            apiClient->fetchUserInfo ([this] (bool success, int httpStatus, const UserCredits& credits)
+            {
+                if (success)
+                {
+                    creditsComponent.setCredits (credits);
+                    statusComponent.setStatus ("Ready.");
+                    refreshPresets();
+                }
+                else if (httpStatus == 401 || httpStatus == 403)
+                {
+                    statusComponent.setStatus ("Invalid API token. Please check Settings.");
+                }
+                else
+                {
+                    statusComponent.setStatus ("Connection failed. Check your internet.");
+                }
+            });
+        }
+        else
+        {
+            statusComponent.setStatus ("No API token. Please configure in Settings.");
+        }
     });
 }
 
@@ -194,7 +238,7 @@ void MainComponent::onCancelClicked()
 
 void MainComponent::refreshCredits()
 {
-    apiClient->fetchUserInfo ([this] (bool success, const UserCredits& credits)
+    apiClient->fetchUserInfo ([this] (bool success, int /*httpStatus*/, const UserCredits& credits)
     {
         if (success)
             creditsComponent.setCredits (credits);
