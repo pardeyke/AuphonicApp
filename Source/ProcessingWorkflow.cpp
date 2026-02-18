@@ -13,7 +13,9 @@ ProcessingWorkflow::~ProcessingWorkflow()
 
 void ProcessingWorkflow::start (const juce::File& inputFile,
                                  const juce::String& presetUuid,
-                                 const juce::var& manualSettings)
+                                 const juce::var& manualSettings,
+                                 bool avoidOverwriteFlag,
+                                 bool writeSettingsXmlFlag)
 {
     cancel();
 
@@ -24,6 +26,8 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
     productionUuid = {};
     lastOutputFile = juce::File();
     targetExtension = {};
+    avoidOverwrite   = avoidOverwriteFlag;
+    writeSettingsXml = writeSettingsXmlFlag;
 
     // Resolve "keep" output format based on source file extension
     if (settings.getProperty ("output_format", {}).toString() == "keep")
@@ -250,19 +254,51 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
 {
     setState (State::Saving);
 
+    auto now = juce::Time::getCurrentTime();
+    juce::String suffix = avoidOverwrite
+        ? ("_auphonic_" + now.formatted ("%Y%m%d_%H%M%S"))
+        : juce::String{};
+
     auto outputFile = sourceFile.getParentDirectory()
-        .getChildFile (sourceFile.getFileNameWithoutExtension() + tempFile.getFileExtension());
+        .getChildFile (sourceFile.getFileNameWithoutExtension() + suffix + tempFile.getFileExtension());
 
     if (listener)
         listener->workflowProgressChanged (-1.0, "Saving " + outputFile.getFileName() + "...");
 
-    if (outputFile != sourceFile && outputFile.existsAsFile())
+    // Only delete an existing file when we're NOT using the suffix (i.e. overwrite mode)
+    if (suffix.isEmpty() && outputFile != sourceFile && outputFile.existsAsFile())
         outputFile.deleteFile();
 
     bool success = tempFile.moveFileTo (outputFile);
     if (success)
     {
         lastOutputFile = outputFile;
+
+        if (writeSettingsXml)
+        {
+            auto root = std::make_unique<juce::DynamicObject>();
+            root->setProperty ("input_file",  sourceFile.getFullPathName());
+            root->setProperty ("output_file", outputFile.getFullPathName());
+            root->setProperty ("processed_at", now.formatted ("%Y-%m-%d %H:%M:%S"));
+
+            if (presetId.isNotEmpty())
+            {
+                root->setProperty ("processing_mode", "preset");
+                root->setProperty ("preset_uuid", presetId);
+            }
+            else
+            {
+                root->setProperty ("processing_mode", "manual");
+                root->setProperty ("settings", settings);
+            }
+
+            auto jsonFile = outputFile.withFileExtension (".json");
+            juce::FileOutputStream jsonStream (jsonFile);
+            if (jsonStream.openedOk())
+                jsonStream.writeText (juce::JSON::toString (juce::var (root.release()), false),
+                                      false, false, "\n");
+        }
+
         setState (State::Done);
         if (listener)
         {

@@ -183,6 +183,13 @@ ManualOptionsComponent::ManualOptionsComponent()
     populateBitrateCombo();
     bitrateCombo.onChange = [this] { notifyChange(); };
 
+    // ── Output Behavior ──
+    addAndMakeVisible (avoidOverwriteToggle);
+    avoidOverwriteToggle.onClick = [this] { notifyChange(); };
+
+    addAndMakeVisible (writeXmlToggle);
+    writeXmlToggle.onClick = [this] { notifyChange(); };
+
     updateDependentVisibility();
 }
 
@@ -551,6 +558,12 @@ void ManualOptionsComponent::resized()
         bitrateLabel.setBounds (row.removeFromLeft (100));
         bitrateCombo.setBounds (row.removeFromLeft (120));
     }
+
+    // ── Output Behavior ──
+    area.removeFromTop (gap + 2);
+    avoidOverwriteToggle.setBounds (area.removeFromTop (rowH));
+    area.removeFromTop (gap);
+    writeXmlToggle.setBounds (area.removeFromTop (rowH));
 }
 
 int ManualOptionsComponent::getRequiredHeight() const
@@ -601,6 +614,9 @@ int ManualOptionsComponent::getRequiredHeight() const
     // Bitrate row (lossy formats only)
     if (bitrateCombo.isVisible())
         h += gap + rowH;
+
+    // Output behavior toggles (always visible)
+    h += gap + 2 + rowH + gap + rowH;
 
     return h;
 }
@@ -747,8 +763,10 @@ juce::var ManualOptionsComponent::getWidgetState() const
     state->setProperty ("breathAmount", breathAmountCombo.getSelectedId());
     state->setProperty ("filterMethod", filterMethodCombo.getSelectedId());
     state->setProperty ("loudnessTarget", loudnessTargetCombo.getSelectedId());
-    state->setProperty ("outputFormat",  outputFormatCombo.getSelectedId());
-    state->setProperty ("outputBitrate", bitrateCombo.getSelectedId());
+    state->setProperty ("outputFormat",    outputFormatCombo.getSelectedId());
+    state->setProperty ("outputBitrate",   bitrateCombo.getSelectedId());
+    state->setProperty ("avoidOverwrite",  avoidOverwriteToggle.getToggleState());
+    state->setProperty ("writeXml",        writeXmlToggle.getToggleState());
 
     return juce::var (state.release());
 }
@@ -799,8 +817,17 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
     setCombo (outputFormatCombo, "outputFormat", 10);
     populateBitrateCombo(); // repopulate for restored format before restoring bitrate
     setCombo (bitrateCombo, "outputBitrate", 0);
+    setToggle (avoidOverwriteToggle, "avoidOverwrite", false);
+    setToggle (writeXmlToggle, "writeXml", false);
 
     suppressCallbacks = false;
+    updateDependentVisibility();
+}
+
+void ManualOptionsComponent::selectKeepFormat()
+{
+    outputFormatCombo.setSelectedId (10, juce::dontSendNotification);
+    populateBitrateCombo();
     updateDependentVisibility();
 }
 

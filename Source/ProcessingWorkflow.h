@@ -34,7 +34,9 @@ public:
 
     void start (const juce::File& inputFile,
                 const juce::String& presetUuid,
-                const juce::var& manualSettings);
+                const juce::var& manualSettings,
+                bool avoidOverwrite,
+                bool writeSettingsXml);
     void cancel();
 
     State getState() const { return state; }
@@ -65,6 +67,8 @@ private:
     juce::String presetId;
     juce::var settings;
     juce::String targetExtension; // set when post-download format conversion is needed
+    bool avoidOverwrite   = false;
+    bool writeSettingsXml = false;
     bool cancelled = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProcessingWorkflow)

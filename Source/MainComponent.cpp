@@ -70,6 +70,10 @@ MainComponent::MainComponent (const juce::File& initialFile)
     // Restore manual settings before presets load (presets restore happens in refreshPresets callback)
     restoreLastConfig();
 
+    // When launched with a file argument, "Keep Format" is the most sensible default
+    if (initialFile.existsAsFile())
+        manualOptionsComponent.selectKeepFormat();
+
     if (settingsManager.hasApiToken())
     {
         statusComponent.setStatus ("Connecting...");
@@ -226,7 +230,9 @@ void MainComponent::onProcessClicked()
     }
 
     saveCurrentConfig();
-    workflow->start (file, presetUuid, manualSettings);
+    workflow->start (file, presetUuid, manualSettings,
+                     manualOptionsComponent.shouldAvoidOverwrite(),
+                     manualOptionsComponent.shouldWriteSettingsXml());
 }
 
 void MainComponent::onCancelClicked()

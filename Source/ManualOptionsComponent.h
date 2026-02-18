@@ -19,6 +19,11 @@ public:
 
     void applyApiSettings (const juce::var& algorithms);
 
+    void selectKeepFormat();
+
+    bool shouldAvoidOverwrite() const  { return avoidOverwriteToggle.getToggleState(); }
+    bool shouldWriteSettingsXml() const { return writeXmlToggle.getToggleState(); }
+
     std::function<void()> onChange;
 
 private:
@@ -98,6 +103,10 @@ private:
     juce::ComboBox outputFormatCombo;
     juce::Label bitrateLabel { {}, "Bitrate:" };
     juce::ComboBox bitrateCombo;
+
+    // --- Output Behavior ---
+    juce::ToggleButton avoidOverwriteToggle { "Create a new file (don't overwrite)" };
+    juce::ToggleButton writeXmlToggle       { "Write settings JSON alongside output" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ManualOptionsComponent)
 };
