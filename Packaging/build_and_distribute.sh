@@ -55,13 +55,34 @@ spctl --assess --type exec --verbose "${APP_PATH}" 2>&1 || true
 
 echo ""
 echo "═══════════════════════════════════════"
+echo " Notarizing .app"
+echo "═══════════════════════════════════════"
+
+# 5. Zip the .app for submission (notarytool requires a zip for .app bundles)
+APP_ZIP="${BUILD_DIR}/${APP_NAME}.zip"
+rm -f "${APP_ZIP}"
+ditto -c -k --keepParent "${APP_PATH}" "${APP_ZIP}"
+
+# 6. Submit .app for notarization
+xcrun notarytool submit "${APP_ZIP}" \
+    --keychain-profile "${NOTARY_PROFILE}" \
+    --wait
+
+rm -f "${APP_ZIP}"
+
+# 7. Staple the ticket directly onto the .app
+xcrun stapler staple "${APP_PATH}"
+echo "✓ .app notarized and stapled"
+
+echo ""
+echo "═══════════════════════════════════════"
 echo " Creating DMG"
 echo "═══════════════════════════════════════"
 
-# 5. Remove old DMG
+# 8. Remove old DMG
 rm -f "${DMG_PATH}"
 
-# 6. Create DMG with Applications symlink
+# 9. Create DMG with Applications symlink (contains the already-stapled .app)
 STAGING_DIR=$(mktemp -d)
 cp -R "${APP_PATH}" "${STAGING_DIR}/"
 ln -s /Applications "${STAGING_DIR}/Applications"
@@ -75,22 +96,54 @@ rm -rf "${STAGING_DIR}"
 
 echo "✓ DMG created at ${DMG_PATH}"
 
-# 7. Sign DMG
+# 10. Sign DMG
 codesign --force --sign "${SIGNING_IDENTITY}" --timestamp "${DMG_PATH}"
 echo "✓ DMG signed"
 
 echo ""
 echo "═══════════════════════════════════════"
-echo " Notarizing"
+echo " Notarizing DMG"
 echo "═══════════════════════════════════════"
 
-# 8. Submit for notarization
+# 11. Submit DMG for notarization
 xcrun notarytool submit "${DMG_PATH}" \
     --keychain-profile "${NOTARY_PROFILE}" \
     --wait
 
-# 9. Staple the ticket
+# 12. Staple the ticket onto the DMG
 xcrun stapler staple "${DMG_PATH}"
+echo "✓ DMG notarized and stapled"
+
+echo ""
+echo "═══════════════════════════════════════"
+echo " Verification"
+echo "═══════════════════════════════════════"
+
+APP_BINARY="${APP_PATH}/Contents/MacOS/${APP_NAME}"
+
+echo ""
+echo "── Staple validation ──"
+xcrun stapler validate "${APP_PATH}"  && echo "✓ .app staple valid"  || echo "✗ .app staple INVALID"
+xcrun stapler validate "${DMG_PATH}"  && echo "✓ DMG staple valid"   || echo "✗ DMG staple INVALID"
+
+echo ""
+echo "── Gatekeeper assessment ──"
+spctl --assess --type exec --verbose "${APP_PATH}" 2>&1
+spctl --assess --type open --context context:primary-signature --verbose "${DMG_PATH}" 2>&1
+
+echo ""
+echo "── Architectures ──"
+lipo -info "${APP_BINARY}"
+
+echo ""
+echo "── Minimum macOS version ──"
+xcrun vtool -show-build "${APP_BINARY}"
+
+echo ""
+echo "── Linked libraries (non-system) ──"
+otool -L "${APP_BINARY}" \
+    | grep -v '/usr/lib\|/System/Library\|@rpath\|@executable_path' \
+    || echo "  (none — all system or embedded)"
 
 echo ""
 echo "═══════════════════════════════════════"
