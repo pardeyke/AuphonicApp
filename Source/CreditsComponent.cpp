@@ -43,8 +43,7 @@ void CreditsComponent::setFile (const juce::File& file)
             fileChannels = (int) reader->numChannels;
 
             double durationHours = fileDurationSeconds / 3600.0;
-            double multiplier = (fileChannels >= 2) ? 2.0 : 1.0;
-            fileCostHours = durationHours * multiplier;
+            fileCostHours = durationHours;
             fileLoaded = true;
         }
     }
