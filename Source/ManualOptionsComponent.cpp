@@ -164,6 +164,8 @@ ManualOptionsComponent::ManualOptionsComponent()
     // ── Output Format ──
     addAndMakeVisible (outputFormatLabel);
     addAndMakeVisible (outputFormatCombo);
+    outputFormatCombo.addItem ("Keep Format", 10);
+    outputFormatCombo.addSeparator();
     outputFormatCombo.addItem ("WAV 16-bit", 1);
     outputFormatCombo.addItem ("WAV 24-bit", 2);
     outputFormatCombo.addItem ("FLAC",       3);
@@ -173,7 +175,7 @@ ManualOptionsComponent::ManualOptionsComponent()
     outputFormatCombo.addItem ("AAC",        7);
     outputFormatCombo.addItem ("OGG Vorbis", 8);
     outputFormatCombo.addItem ("Opus",       9);
-    outputFormatCombo.setSelectedId (1, juce::dontSendNotification);
+    outputFormatCombo.setSelectedId (10, juce::dontSendNotification);
     outputFormatCombo.onChange = [this] { populateBitrateCombo(); updateDependentVisibility(); notifyChange(); };
 
     addAndMakeVisible (bitrateLabel);
@@ -366,8 +368,9 @@ void ManualOptionsComponent::updateDependentVisibility()
     filterMethodLabel.setVisible (filterEnabled);
     filterMethodCombo.setVisible (filterEnabled);
 
-    // Bitrate (lossy formats only: IDs 5–9)
-    bool showBitrate = (outputFormatCombo.getSelectedId() >= 5);
+    // Bitrate (lossy formats only: IDs 5–9, not Keep Format ID=10)
+    int fmtId = outputFormatCombo.getSelectedId();
+    bool showBitrate = (fmtId >= 5 && fmtId <= 9);
     bitrateLabel.setVisible (showBitrate);
     bitrateCombo.setVisible (showBitrate);
 
@@ -692,7 +695,9 @@ juce::var ManualOptionsComponent::getSettings() const
 
     static const char* formats[] = { "wav", "wav-24bit", "flac", "alac", "mp3", "mp3-vbr", "aac", "vorbis", "opus" };
     int fmtId = outputFormatCombo.getSelectedId();
-    if (fmtId >= 1 && fmtId <= 9)
+    if (fmtId == 10)
+        settings->setProperty ("output_format", "keep");
+    else if (fmtId >= 1 && fmtId <= 9)
         settings->setProperty ("output_format", juce::String (formats[fmtId - 1]));
 
     auto bitrateInfo = bitrateInfoForFormat (fmtId);
@@ -709,7 +714,7 @@ bool ManualOptionsComponent::hasAnyEnabled() const
         || noiseToggle.getToggleState()
         || filterToggle.getToggleState()
         || loudnessToggle.getToggleState()
-        || outputFormatCombo.getSelectedId() != 1; // non-WAV format selected
+        || outputFormatCombo.getSelectedId() != 1; // non-default format (Keep Format or explicit selection)
 }
 
 juce::var ManualOptionsComponent::getWidgetState() const
@@ -791,7 +796,7 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
     setCombo (breathAmountCombo, "breathAmount", 1);
     setCombo (filterMethodCombo, "filterMethod", 1);
     setCombo (loudnessTargetCombo, "loudnessTarget", 1);
-    setCombo (outputFormatCombo, "outputFormat", 1);
+    setCombo (outputFormatCombo, "outputFormat", 10);
     populateBitrateCombo(); // repopulate for restored format before restoring bitrate
     setCombo (bitrateCombo, "outputBitrate", 0);
 

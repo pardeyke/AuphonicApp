@@ -1,4 +1,5 @@
 #include "ProcessingWorkflow.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 ProcessingWorkflow::ProcessingWorkflow (AuphonicApiClient& apiClient)
     : api (apiClient)
@@ -22,6 +23,31 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
     cancelled = false;
     productionUuid = {};
     lastOutputFile = juce::File();
+    targetExtension = {};
+
+    // Resolve "keep" output format based on source file extension
+    if (settings.getProperty ("output_format", {}).toString() == "keep")
+    {
+        auto ext = sourceFile.getFileExtension().toLowerCase();
+        juce::String apiFormat;
+
+        if      (ext == ".wav")                   apiFormat = "wav-24bit";
+        else if (ext == ".flac")                  apiFormat = "flac";
+        else if (ext == ".mp3")                   apiFormat = "mp3";
+        else if (ext == ".aac" || ext == ".m4a")  apiFormat = "aac";
+        else if (ext == ".ogg")                   apiFormat = "vorbis";
+        else if (ext == ".opus")                  apiFormat = "opus";
+        else if (ext == ".alac")                  apiFormat = "alac";
+        else if (ext == ".aif" || ext == ".aiff")
+        {
+            apiFormat = "wav-24bit";
+            targetExtension = ext; // needs WAV→AIFF conversion after download
+        }
+        else { apiFormat = "wav-24bit"; } // unknown: safe lossless fallback
+
+        if (auto* obj = settings.getDynamicObject())
+            obj->setProperty ("output_format", apiFormat);
+    }
 
     stepCreateProduction();
 }
@@ -151,8 +177,73 @@ void ProcessingWorkflow::stepDownload (const juce::String& downloadUrl)
             if (cancelled) return;
             if (! success) { setError ("Download failed: " + error); return; }
 
-            stepSave (tempFile);
+            if (targetExtension.isNotEmpty()
+                && tempFile.getFileExtension().toLowerCase() != targetExtension)
+                stepConvert (tempFile);
+            else
+                stepSave (tempFile);
         });
+}
+
+void ProcessingWorkflow::stepConvert (const juce::File& tempFile)
+{
+    setState (State::Converting);
+    if (listener)
+        listener->workflowProgressChanged (-1.0, "Converting to "
+            + targetExtension.trimCharactersAtStart (".").toUpperCase() + "...");
+
+    auto target = targetExtension;
+
+    juce::Thread::launch ([this, tempFile, target]
+    {
+        auto convertedFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+            .getChildFile ("auphonic_converted_"
+                + juce::String (juce::Random::getSystemRandom().nextInt64()) + target);
+
+        bool success = false;
+        juce::String error;
+
+        juce::AudioFormatManager mgr;
+        mgr.registerBasicFormats();
+
+        if (auto* reader = mgr.createReaderFor (tempFile))
+        {
+            std::unique_ptr<juce::AudioFormatReader> readerOwner (reader);
+
+            // For .aif / .aiff we use AiffAudioFormat directly
+            juce::AiffAudioFormat aiffFmt;
+            auto os = std::make_unique<juce::FileOutputStream> (convertedFile);
+
+            if (os->openedOk())
+            {
+                if (auto* writer = aiffFmt.createWriterFor (
+                        os.get(),
+                        reader->sampleRate,
+                        reader->numChannels,
+                        static_cast<int> (reader->bitsPerSample),
+                        reader->metadataValues,
+                        0))
+                {
+                    os.release(); // writer now owns the stream
+                    std::unique_ptr<juce::AudioFormatWriter> writerOwner (writer);
+                    success = writer->writeFromAudioReader (*reader, 0, reader->lengthInSamples);
+                    if (! success) error = "Failed to write converted file";
+                }
+                else { error = "Could not create AIFF writer"; }
+            }
+            else { error = "Could not create temp file for conversion"; }
+        }
+        else { error = "Could not read downloaded file for conversion"; }
+
+        tempFile.deleteFile(); // clean up the WAV temp
+
+        juce::MessageManager::callAsync ([this, success, convertedFile, error]
+        {
+            if (cancelled) return;
+            if (! success) { setError ("Format conversion failed: " + error); return; }
+            stepSave (convertedFile);
+        });
+    });
 }
 
 void ProcessingWorkflow::stepSave (const juce::File& tempFile)

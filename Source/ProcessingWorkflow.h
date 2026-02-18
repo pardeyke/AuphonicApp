@@ -14,6 +14,7 @@ public:
         Starting,
         Processing,
         Downloading,
+        Converting,
         Saving,
         Done,
         Error
@@ -51,6 +52,7 @@ private:
     void stepStart();
     void stepPollStatus();
     void stepDownload (const juce::String& downloadUrl);
+    void stepConvert (const juce::File& tempFile);
     void stepSave (const juce::File& tempFile);
 
     AuphonicApiClient& api;
@@ -62,6 +64,7 @@ private:
     juce::String productionUuid;
     juce::String presetId;
     juce::var settings;
+    juce::String targetExtension; // set when post-download format conversion is needed
     bool cancelled = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProcessingWorkflow)
