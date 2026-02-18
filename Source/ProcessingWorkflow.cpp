@@ -21,6 +21,7 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
     settings = manualSettings;
     cancelled = false;
     productionUuid = {};
+    lastOutputFile = juce::File();
 
     stepCreateProduction();
 }
@@ -157,12 +158,20 @@ void ProcessingWorkflow::stepDownload (const juce::String& downloadUrl)
 void ProcessingWorkflow::stepSave (const juce::File& tempFile)
 {
     setState (State::Saving);
-    if (listener)
-        listener->workflowProgressChanged (-1.0, "Saving to " + sourceFile.getFileName() + "...");
 
-    bool success = tempFile.moveFileTo (sourceFile);
+    auto outputFile = sourceFile.getParentDirectory()
+        .getChildFile (sourceFile.getFileNameWithoutExtension() + tempFile.getFileExtension());
+
+    if (listener)
+        listener->workflowProgressChanged (-1.0, "Saving " + outputFile.getFileName() + "...");
+
+    if (outputFile != sourceFile && outputFile.existsAsFile())
+        outputFile.deleteFile();
+
+    bool success = tempFile.moveFileTo (outputFile);
     if (success)
     {
+        lastOutputFile = outputFile;
         setState (State::Done);
         if (listener)
         {
@@ -172,6 +181,6 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
     }
     else
     {
-        setError ("Failed to overwrite original file: " + sourceFile.getFullPathName());
+        setError ("Failed to save output file: " + outputFile.getFullPathName());
     }
 }

@@ -28,6 +28,7 @@ private:
     void populateStrengthCombo (juce::ComboBox& combo);
     void populateCompressorCombo (juce::ComboBox& combo);
     void populateMusicGainCombo (juce::ComboBox& combo);
+    void populateBitrateCombo();
     void updateDependentVisibility();
 
     static constexpr int rowH = 24;
@@ -91,6 +92,12 @@ private:
     juce::ToggleButton loudnessToggle { "Loudness Normalization" };
     juce::Label loudnessTargetLabel { {}, "Target:" };
     juce::ComboBox loudnessTargetCombo;
+
+    // --- Output Format ---
+    juce::Label outputFormatLabel { {}, "Output Format:" };
+    juce::ComboBox outputFormatCombo;
+    juce::Label bitrateLabel { {}, "Bitrate:" };
+    juce::ComboBox bitrateCombo;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ManualOptionsComponent)
 };

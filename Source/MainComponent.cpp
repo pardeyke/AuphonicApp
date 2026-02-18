@@ -351,7 +351,7 @@ void MainComponent::workflowCompleted()
     refreshCredits();
 
     juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon,
-        "Success", "Processing complete. Output saved to:\n" + fileDropComponent.getFile().getFullPathName());
+        "Success", "Processing complete. Output saved to:\n" + workflow->getLastOutputFile().getFullPathName());
 }
 
 void MainComponent::workflowFailed (const juce::String& errorMessage)

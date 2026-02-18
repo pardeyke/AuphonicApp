@@ -10,7 +10,8 @@
       "Bash(xxd:*)",
       "Bash(python3:*)",
       "Bash(swift:*)",
-      "Bash(sips:*)"
+      "Bash(sips:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

@@ -38,6 +38,7 @@ public:
 
     State getState() const { return state; }
     void setListener (Listener* l) { listener = l; }
+    juce::File getLastOutputFile() const { return lastOutputFile; }
 
 private:
     void timerCallback() override;
@@ -57,6 +58,7 @@ private:
 
     State state = State::Idle;
     juce::File sourceFile;
+    juce::File lastOutputFile;
     juce::String productionUuid;
     juce::String presetId;
     juce::var settings;

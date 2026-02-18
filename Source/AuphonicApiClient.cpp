@@ -190,18 +190,31 @@ void AuphonicApiClient::createProduction (const juce::String& presetUuid,
         if (presetUuid.isNotEmpty())
             json->setProperty ("preset", presetUuid);
 
+        juce::String outputFormat;
+        int outputBitrate = 0;
         if (auto* manualObj = manualSettings.getDynamicObject())
         {
             for (auto& prop : manualObj->getProperties())
-                json->setProperty (prop.name, prop.value);
+            {
+                if (prop.name.toString() == "output_format")
+                    outputFormat = prop.value.toString();
+                else if (prop.name.toString() == "output_bitrate")
+                    outputBitrate = (int) prop.value;
+                else
+                    json->setProperty (prop.name, prop.value);
+            }
         }
 
-        // Force WAV output
-        auto outputFile = std::make_unique<juce::DynamicObject>();
-        outputFile->setProperty ("format", "wav");
-        juce::Array<juce::var> outputFiles;
-        outputFiles.add (juce::var (outputFile.release()));
-        json->setProperty ("output_files", outputFiles);
+        if (outputFormat.isNotEmpty())
+        {
+            auto outputFileObj = std::make_unique<juce::DynamicObject>();
+            outputFileObj->setProperty ("format", outputFormat);
+            if (outputBitrate > 0)
+                outputFileObj->setProperty ("bitrate", outputBitrate);
+            juce::Array<juce::var> outputFiles;
+            outputFiles.add (juce::var (outputFileObj.release()));
+            json->setProperty ("output_files", outputFiles);
+        }
 
         auto jsonString = juce::JSON::toString (juce::var (json.release()));
 
@@ -337,8 +350,10 @@ void AuphonicApiClient::downloadFile (const juce::String& downloadUrl,
 
     juce::Thread::launch ([callback, downloadUrl, tokenCopy]
     {
+        juce::String ext = juce::URL (downloadUrl).getFileName().fromLastOccurrenceOf (".", false, false);
+        if (ext.isEmpty()) ext = "wav";
         auto tempFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
-            .getChildFile ("auphonic_download_" + juce::String (juce::Random::getSystemRandom().nextInt64()) + ".wav");
+            .getChildFile ("auphonic_download_" + juce::String (juce::Random::getSystemRandom().nextInt64()) + "." + ext);
 
         auto url = juce::URL (downloadUrl);
         int statusCode = 0;
