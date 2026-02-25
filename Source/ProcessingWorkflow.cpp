@@ -307,6 +307,8 @@ void ProcessingWorkflow::stepDownload (const juce::String& downloadUrl)
             if (cancelled) return;
             if (! success) { setError ("Download failed: " + error); return; }
 
+            stripMetadata (tempFile);
+
             if (targetExtension.isNotEmpty()
                 && tempFile.getFileExtension().toLowerCase() != targetExtension)
                 stepConvert (tempFile);
@@ -374,6 +376,49 @@ void ProcessingWorkflow::stepConvert (const juce::File& tempFile)
             stepSave (convertedFile);
         });
     });
+}
+
+void ProcessingWorkflow::stripMetadata (const juce::File& file)
+{
+    if (file.getFileExtension().toLowerCase() != ".wav")
+        return;
+
+    // Re-write the WAV through JUCE's writer with empty metadata.
+    // This guarantees all non-audio chunks (LIST INFO, bext, etc.)
+    // written by other tools (e.g. FFmpeg/Lavf) are discarded.
+    juce::WavAudioFormat wavFormat;
+    std::unique_ptr<juce::AudioFormatReader> reader (
+        wavFormat.createReaderFor (file.createInputStream().release(), true));
+
+    if (reader == nullptr)
+        return;
+
+    auto tempFile = file.getSiblingFile (file.getFileNameWithoutExtension()
+        + "_stripped_" + juce::String (juce::Random::getSystemRandom().nextInt64()) + ".wav");
+
+    {
+        auto os = std::make_unique<juce::FileOutputStream> (tempFile);
+        if (! os->openedOk())
+            return;
+
+        std::unique_ptr<juce::AudioFormatWriter> writer (
+            wavFormat.createWriterFor (os.get(),
+                                       reader->sampleRate,
+                                       reader->numChannels,
+                                       static_cast<int> (reader->bitsPerSample),
+                                       {},  // empty metadata
+                                       0));
+        if (writer == nullptr)
+            return;
+
+        os.release(); // writer owns the stream
+        writer->writeFromAudioReader (*reader, 0, reader->lengthInSamples);
+        writer.reset();
+    }
+
+    reader.reset(); // release the source file
+
+    tempFile.moveFileTo (file);
 }
 
 void ProcessingWorkflow::stepSave (const juce::File& tempFile)

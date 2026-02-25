@@ -58,6 +58,7 @@ private:
     void stepPollStatus();
     void stepDownload (const juce::String& downloadUrl);
     void stepConvert (const juce::File& tempFile);
+    void stripMetadata (const juce::File& file);
     void stepSave (const juce::File& tempFile);
 
     AuphonicApiClient& api;
