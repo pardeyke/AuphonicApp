@@ -4,10 +4,6 @@
 
 <h1 align="center">AuphonicApp</h1>
 
-<p align="center">
-  <img src="Packaging/Preview.png" width="520" alt="AuphonicApp preview">
-</p>
-
 A lightweight macOS desktop client for [Auphonic](https://auphonic.com) audio post-production. Drag in an audio file, pick your settings, and let Auphonic handle the rest.
 
 ## Features
@@ -20,6 +16,11 @@ A lightweight macOS desktop client for [Auphonic](https://auphonic.com) audio po
 - **Credit tracking** — see available credits and estimated cost before processing
 - **Progress feedback** — real-time status during upload, processing, and download
 - **Show in Finder** — reveal the output file when done
+
+<p align="center">
+  <img src="Packaging/Preview.png" width="520" alt="AuphonicApp preview">
+</p>
+
 
 ## Build
 
