@@ -12,7 +12,10 @@
       "Bash(swift:*)",
       "Bash(sips:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(gh repo:*)",
+      "Bash(git tag:*)",
+      "Bash(gh release:*)"
     ]
   }
 }
