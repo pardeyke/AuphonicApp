@@ -17,6 +17,9 @@ public:
     juce::String getLastManualSettings() const;
     void setLastManualSettings (const juce::String& jsonString);
 
+    juce::String getAudioOutputDevice() const;
+    void setAudioOutputDevice (const juce::String& deviceName);
+
 private:
     std::unique_ptr<juce::ApplicationProperties> appProperties;
 

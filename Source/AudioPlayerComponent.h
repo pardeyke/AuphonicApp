@@ -17,6 +17,9 @@ public:
     void loadFile (const juce::File& file);
     void stop();
     bool isPlaying() const;
+    bool hasFileLoaded() const { return fileLoaded; }
+    void togglePlayPause();
+    void setOutputDevice (const juce::String& deviceName);
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -40,9 +43,11 @@ private:
     juce::AudioThumbnailCache thumbnailCache { 5 };
     juce::AudioThumbnail thumbnail { 512, formatManager, thumbnailCache };
 
-    juce::TextButton playButton { "Play" };
-    juce::TextButton stopButton { "Stop" };
+    juce::DrawableButton playButton { "Play", juce::DrawableButton::ImageFitted };
+    juce::DrawableButton stopButton { "Stop", juce::DrawableButton::ImageFitted };
     juce::Label timeLabel;
+
+    void updatePlayButtonIcon();
 
     bool fileLoaded = false;
 

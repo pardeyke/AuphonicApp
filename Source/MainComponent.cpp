@@ -103,6 +103,8 @@ MainComponent::MainComponent (const juce::File& initialFile)
         statusComponent.setStatus ("No API token. Please configure in Settings.");
     }
 
+    audioPlayerComponent.setOutputDevice (settingsManager.getAudioOutputDevice());
+
     updateButtonStates();
     setSize (520, 788);
 }
@@ -110,6 +112,17 @@ MainComponent::MainComponent (const juce::File& initialFile)
 MainComponent::~MainComponent()
 {
     workflow->setListener (nullptr);
+}
+
+bool MainComponent::keyPressed (const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress::spaceKey && audioPlayerComponent.hasFileLoaded())
+    {
+        audioPlayerComponent.togglePlayPause();
+        return true;
+    }
+
+    return false;
 }
 
 void MainComponent::paint (juce::Graphics& g)
@@ -176,6 +189,7 @@ void MainComponent::onSettingsClicked()
     SettingsComponent::showDialog (settingsManager, this, [this]
     {
         apiClient->setToken (settingsManager.getApiToken());
+        audioPlayerComponent.setOutputDevice (settingsManager.getAudioOutputDevice());
 
         if (settingsManager.hasApiToken())
         {

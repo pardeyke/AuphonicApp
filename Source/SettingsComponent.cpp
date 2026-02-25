@@ -5,8 +5,10 @@ SettingsComponent::SettingsComponent (SettingsManager& settings, std::function<v
 {
     addAndMakeVisible (tokenLabel);
     addAndMakeVisible (tokenEditor);
-    addAndMakeVisible (saveButton);
     addAndMakeVisible (helpLabel);
+    addAndMakeVisible (outputDeviceLabel);
+    addAndMakeVisible (outputDeviceCombo);
+    addAndMakeVisible (saveButton);
 
     tokenEditor.setPasswordCharacter ('*');
     tokenEditor.setText (settingsManager.getApiToken(), juce::dontSendNotification);
@@ -14,16 +16,51 @@ SettingsComponent::SettingsComponent (SettingsManager& settings, std::function<v
     helpLabel.setFont (juce::FontOptions (12.0f));
     helpLabel.setColour (juce::Label::textColourId, juce::Colours::grey);
 
+    // Populate output device combo
+    {
+        juce::AudioDeviceManager tempDeviceManager;
+        tempDeviceManager.initialiseWithDefaultDevices (0, 2);
+
+        int itemId = 1;
+        outputDeviceCombo.addItem ("(Default)", itemId++);
+
+        auto savedDevice = settingsManager.getAudioOutputDevice();
+        int selectedId = 1;
+
+        for (auto* deviceType : tempDeviceManager.getAvailableDeviceTypes())
+        {
+            deviceType->scanForDevices();
+            auto deviceNames = deviceType->getDeviceNames (false);
+
+            for (auto& name : deviceNames)
+            {
+                outputDeviceCombo.addItem (name, itemId);
+                if (name == savedDevice)
+                    selectedId = itemId;
+                itemId++;
+            }
+        }
+
+        outputDeviceCombo.setSelectedId (selectedId, juce::dontSendNotification);
+    }
+
     saveButton.onClick = [this]
     {
         settingsManager.setApiToken (tokenEditor.getText().trim());
+
+        auto selectedText = outputDeviceCombo.getText();
+        if (outputDeviceCombo.getSelectedId() == 1) // "(Default)"
+            settingsManager.setAudioOutputDevice ("");
+        else
+            settingsManager.setAudioOutputDevice (selectedText);
+
         if (onTokenSaved)
             onTokenSaved();
         if (auto* dw = findParentComponentOfClass<juce::DialogWindow>())
             dw->exitModalState (0);
     };
 
-    setSize (400, 140);
+    setSize (400, 200);
 }
 
 void SettingsComponent::resized()
@@ -39,7 +76,12 @@ void SettingsComponent::resized()
     area.removeFromTop (4);
     helpLabel.setBounds (area.removeFromTop (20));
 
-    area.removeFromTop (8);
+    area.removeFromTop (12);
+    auto deviceRow = area.removeFromTop (24);
+    outputDeviceLabel.setBounds (deviceRow.removeFromLeft (110));
+    outputDeviceCombo.setBounds (deviceRow);
+
+    area.removeFromTop (12);
     saveButton.setBounds (area.removeFromTop (28).withSizeKeepingCentre (100, 28));
 }
 

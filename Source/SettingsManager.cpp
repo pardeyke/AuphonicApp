@@ -64,3 +64,19 @@ void SettingsManager::setLastManualSettings (const juce::String& jsonString)
         props->saveIfNeeded();
     }
 }
+
+juce::String SettingsManager::getAudioOutputDevice() const
+{
+    if (auto* props = appProperties->getUserSettings())
+        return props->getValue ("audioOutputDevice", "");
+    return {};
+}
+
+void SettingsManager::setAudioOutputDevice (const juce::String& deviceName)
+{
+    if (auto* props = appProperties->getUserSettings())
+    {
+        props->setValue ("audioOutputDevice", deviceName);
+        props->saveIfNeeded();
+    }
+}

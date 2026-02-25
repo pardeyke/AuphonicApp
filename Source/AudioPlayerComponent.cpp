@@ -21,9 +21,28 @@ AudioPlayerComponent::AudioPlayerComponent()
     playButton.setEnabled (false);
     stopButton.setEnabled (false);
 
+    // Set up stop icon (square)
+    {
+        juce::Path stopPath;
+        stopPath.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+        auto normal = std::make_unique<juce::DrawablePath>();
+        normal->setPath (stopPath);
+        normal->setFill (juce::Colour (0xffe5e5e5));
+
+        auto disabled = std::make_unique<juce::DrawablePath>();
+        disabled->setPath (stopPath);
+        disabled->setFill (juce::Colour (0xff555555));
+
+        stopButton.setImages (normal.get(), nullptr, nullptr, disabled.get());
+    }
+
+    updatePlayButtonIcon();
+
     timeLabel.setJustificationType (juce::Justification::centredRight);
     timeLabel.setColour (juce::Label::textColourId, juce::Colour (0xff8e8e93));
     timeLabel.setFont (juce::Font (juce::FontOptions (11.0f)));
+
 }
 
 AudioPlayerComponent::~AudioPlayerComponent()
@@ -64,6 +83,7 @@ void AudioPlayerComponent::stop()
 
     transportSource.setPosition (0.0);
     stopTimer();
+    updatePlayButtonIcon();
     updateTimeLabel();
     repaint();
 }
@@ -113,10 +133,15 @@ void AudioPlayerComponent::resized()
     auto area = getLocalBounds();
     auto controlArea = area.removeFromBottom (26);
 
-    playButton.setBounds (controlArea.removeFromLeft (60));
+    playButton.setBounds (controlArea.removeFromLeft (30));
     controlArea.removeFromLeft (4);
-    stopButton.setBounds (controlArea.removeFromLeft (60));
+    stopButton.setBounds (controlArea.removeFromLeft (30));
     timeLabel.setBounds (controlArea);
+}
+
+void AudioPlayerComponent::togglePlayPause()
+{
+    playButtonClicked();
 }
 
 void AudioPlayerComponent::mouseDown (const juce::MouseEvent& e)
@@ -143,6 +168,7 @@ void AudioPlayerComponent::changeListenerCallback (juce::ChangeBroadcaster* sour
             stopTimer();
         }
 
+        updatePlayButtonIcon();
         updateTimeLabel();
         repaint();
     }
@@ -174,7 +200,41 @@ void AudioPlayerComponent::playButtonClicked()
         startTimerHz (30);
     }
 
+    updatePlayButtonIcon();
     updateTimeLabel();
+}
+
+void AudioPlayerComponent::updatePlayButtonIcon()
+{
+    if (transportSource.isPlaying())
+    {
+        // Pause icon (two vertical bars)
+        juce::Path pausePath;
+        pausePath.addRectangle (0.0f, 0.0f, 3.0f, 10.0f);
+        pausePath.addRectangle (5.0f, 0.0f, 3.0f, 10.0f);
+
+        auto normal = std::make_unique<juce::DrawablePath>();
+        normal->setPath (pausePath);
+        normal->setFill (juce::Colour (0xffe5e5e5));
+
+        playButton.setImages (normal.get());
+    }
+    else
+    {
+        // Play icon (right-pointing triangle)
+        juce::Path playPath;
+        playPath.addTriangle (0.0f, 0.0f, 0.0f, 10.0f, 8.66f, 5.0f);
+
+        auto normal = std::make_unique<juce::DrawablePath>();
+        normal->setPath (playPath);
+        normal->setFill (juce::Colour (0xffe5e5e5));
+
+        auto disabled = std::make_unique<juce::DrawablePath>();
+        disabled->setPath (playPath);
+        disabled->setFill (juce::Colour (0xff555555));
+
+        playButton.setImages (normal.get(), nullptr, nullptr, disabled.get());
+    }
 }
 
 void AudioPlayerComponent::stopButtonClicked()
@@ -202,3 +262,22 @@ juce::String AudioPlayerComponent::formatTime (double seconds) const
     int secs = (int) seconds % 60;
     return juce::String::formatted ("%d:%02d", mins, secs);
 }
+
+void AudioPlayerComponent::setOutputDevice (const juce::String& deviceName)
+{
+    if (deviceName.isEmpty())
+    {
+        deviceManager.initialiseWithDefaultDevices (0, 2);
+        return;
+    }
+
+    auto* currentType = deviceManager.getCurrentDeviceTypeObject();
+    if (currentType != nullptr)
+    {
+        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        deviceManager.getAudioDeviceSetup (setup);
+        setup.outputDeviceName = deviceName;
+        deviceManager.setAudioDeviceSetup (setup, true);
+    }
+}
+
