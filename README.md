@@ -21,6 +21,10 @@ A lightweight macOS desktop client for [Auphonic](https://auphonic.com) audio po
   <img src="Packaging/Preview.png" width="520" alt="AuphonicApp preview">
 </p>
 
+## Setup
+
+Get your API token [here](https://auphonic.com/accounts/settings/#api-key) and paste it into the settings. If everything worked, you should see your remaining credits/minutes at the top of the main window.
+
 
 ## Build
 

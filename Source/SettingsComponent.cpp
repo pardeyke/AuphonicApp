@@ -5,7 +5,7 @@ SettingsComponent::SettingsComponent (SettingsManager& settings, std::function<v
 {
     addAndMakeVisible (tokenLabel);
     addAndMakeVisible (tokenEditor);
-    addAndMakeVisible (helpLabel);
+    addAndMakeVisible (helpLink);
     addAndMakeVisible (outputDeviceLabel);
     addAndMakeVisible (outputDeviceCombo);
     addAndMakeVisible (saveButton);
@@ -13,8 +13,9 @@ SettingsComponent::SettingsComponent (SettingsManager& settings, std::function<v
     tokenEditor.setPasswordCharacter ('*');
     tokenEditor.setText (settingsManager.getApiToken(), juce::dontSendNotification);
 
-    helpLabel.setFont (juce::FontOptions (12.0f));
-    helpLabel.setColour (juce::Label::textColourId, juce::Colours::grey);
+    helpLink.setFont (juce::FontOptions (12.0f), false);
+    helpLink.setColour (juce::HyperlinkButton::textColourId, juce::Colours::grey);
+    helpLink.setJustificationType (juce::Justification::centredLeft);
 
     // Populate output device combo
     {
@@ -74,7 +75,7 @@ void SettingsComponent::resized()
     tokenEditor.setBounds (area.removeFromTop (28));
 
     area.removeFromTop (4);
-    helpLabel.setBounds (area.removeFromTop (20));
+    helpLink.setBounds (area.removeFromTop (20));
 
     area.removeFromTop (12);
     auto deviceRow = area.removeFromTop (24);

@@ -20,7 +20,8 @@ private:
 
     juce::Label tokenLabel { {}, "API Token:" };
     juce::TextEditor tokenEditor;
-    juce::Label helpLabel { {}, "Find your token at auphonic.com/accounts/api-app" };
+    juce::HyperlinkButton helpLink { "Find your API token here",
+                                     juce::URL ("https://auphonic.com/accounts/settings/#api-key") };
 
     juce::Label outputDeviceLabel { {}, "Output Device:" };
     juce::ComboBox outputDeviceCombo;
