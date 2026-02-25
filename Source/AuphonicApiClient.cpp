@@ -187,6 +187,8 @@ void AuphonicApiClient::createProduction (const juce::String& presetUuid,
     {
         auto json = std::make_unique<juce::DynamicObject>();
 
+        json->setProperty ("title", "");
+
         if (presetUuid.isNotEmpty())
             json->setProperty ("preset", presetUuid);
 
