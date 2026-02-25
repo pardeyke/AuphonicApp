@@ -19,8 +19,6 @@ public:
 
     void applyApiSettings (const juce::var& algorithms);
 
-    void selectKeepFormat();
-
     void setFileChannelCount (int numChannels);
     int getSelectedChannel() const;
 

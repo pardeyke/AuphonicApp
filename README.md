@@ -5,4 +5,4 @@ cmake -B build
 ./Packaging/build.sh
 
 # Distribute
-./Packaging/distribute.sh
+./Packaging/build.sh && ./Packaging/distribute.sh

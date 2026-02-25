@@ -780,8 +780,8 @@ juce::var ManualOptionsComponent::getWidgetState() const
     state->setProperty ("breathAmount", breathAmountCombo.getSelectedId());
     state->setProperty ("filterMethod", filterMethodCombo.getSelectedId());
     state->setProperty ("loudnessTarget", loudnessTargetCombo.getSelectedId());
-    state->setProperty ("outputFormat",    outputFormatCombo.getSelectedId());
-    state->setProperty ("outputBitrate",   bitrateCombo.getSelectedId());
+    // Note: outputFormat and outputBitrate are intentionally NOT saved.
+    // "Keep Format" is always the default.
     state->setProperty ("avoidOverwrite",  avoidOverwriteToggle.getToggleState());
     state->setProperty ("writeXml",        writeXmlToggle.getToggleState());
     state->setProperty ("selectedChannel", channelCombo.getSelectedId());
@@ -832,21 +832,14 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
     setCombo (breathAmountCombo, "breathAmount", 1);
     setCombo (filterMethodCombo, "filterMethod", 1);
     setCombo (loudnessTargetCombo, "loudnessTarget", 1);
-    setCombo (outputFormatCombo, "outputFormat", 10);
-    populateBitrateCombo(); // repopulate for restored format before restoring bitrate
-    setCombo (bitrateCombo, "outputBitrate", 0);
+    // outputFormat is always "Keep Format" (id 10) — not restored from saved state.
+    outputFormatCombo.setSelectedId (10, juce::dontSendNotification);
+    populateBitrateCombo();
     setToggle (avoidOverwriteToggle, "avoidOverwrite", false);
     setToggle (writeXmlToggle, "writeXml", false);
     setCombo (channelCombo, "selectedChannel", 1);
 
     suppressCallbacks = false;
-    updateDependentVisibility();
-}
-
-void ManualOptionsComponent::selectKeepFormat()
-{
-    outputFormatCombo.setSelectedId (10, juce::dontSendNotification);
-    populateBitrateCombo();
     updateDependentVisibility();
 }
 
