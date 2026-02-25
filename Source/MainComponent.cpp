@@ -26,6 +26,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
 
     fileDropComponent.onFileSelected = [this] (const juce::File& f)
     {
+        audioPlayerComponent.clearProcessedFile();
         audioPlayerComponent.loadFile (f);
         creditsComponent.setFile (f);
         manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
@@ -381,6 +382,8 @@ void MainComponent::workflowCompleted()
     refreshCredits();
 
     auto outputFile = workflow->getLastOutputFile();
+    audioPlayerComponent.loadProcessedFile (outputFile);
+
     auto* aw = new juce::AlertWindow ("Success",
         "Processing complete. Output saved to:\n" + outputFile.getFullPathName(),
         juce::MessageBoxIconType::InfoIcon);
