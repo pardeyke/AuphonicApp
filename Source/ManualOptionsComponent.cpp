@@ -854,6 +854,8 @@ void ManualOptionsComponent::setFileChannelCount (int numChannels)
 
     if (show)
     {
+        int previousId = channelCombo.getSelectedId();
+
         channelCombo.addItem ("All Channels", 1);
         for (int ch = 1; ch <= numChannels; ++ch)
         {
@@ -862,7 +864,12 @@ void ManualOptionsComponent::setFileChannelCount (int numChannels)
                 name += (ch == 1 ? " (Left)" : " (Right)");
             channelCombo.addItem (name, ch + 1); // id 2 = ch 1, id 3 = ch 2, etc.
         }
-        channelCombo.setSelectedId (1, juce::dontSendNotification);
+
+        // Preserve previous channel selection if still valid, otherwise default to All Channels
+        if (previousId >= 1 && previousId <= numChannels + 1)
+            channelCombo.setSelectedId (previousId, juce::dontSendNotification);
+        else
+            channelCombo.setSelectedId (1, juce::dontSendNotification);
     }
 
     setSize (getWidth(), getRequiredHeight());
