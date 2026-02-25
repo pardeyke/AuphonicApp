@@ -1,5 +1,8 @@
-  # Configure (one-time)
-  cmake -B build
+# Configure (one-time)
+cmake -B build
 
-  # Build
-  cmake --build build
+# Build
+./Packaging/build.sh
+
+# Distribute
+./Packaging/distribute.sh

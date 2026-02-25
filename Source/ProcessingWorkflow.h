@@ -64,7 +64,8 @@ private:
     Listener* listener = nullptr;
 
     State state = State::Idle;
-    juce::File sourceFile;
+    juce::File originalSourceFile; // always points to the user's original file (for output path)
+    juce::File sourceFile;         // file to upload (may be a temp extracted channel)
     juce::File lastOutputFile;
     juce::String productionUuid;
     juce::String presetId;

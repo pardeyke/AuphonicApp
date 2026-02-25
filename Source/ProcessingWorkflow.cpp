@@ -20,6 +20,7 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
 {
     cancel();
 
+    originalSourceFile = inputFile;
     sourceFile = inputFile;
     presetId = presetUuid;
     settings = manualSettings;
@@ -384,14 +385,14 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
         ? ("_auphonic_" + now.formatted ("%Y%m%d_%H%M%S"))
         : juce::String{};
 
-    auto outputFile = sourceFile.getParentDirectory()
-        .getChildFile (sourceFile.getFileNameWithoutExtension() + suffix + tempFile.getFileExtension());
+    auto outputFile = originalSourceFile.getParentDirectory()
+        .getChildFile (originalSourceFile.getFileNameWithoutExtension() + suffix + tempFile.getFileExtension());
 
     if (listener)
         listener->workflowProgressChanged (-1.0, "Saving " + outputFile.getFileName() + "...");
 
     // Only delete an existing file when we're NOT using the suffix (i.e. overwrite mode)
-    if (suffix.isEmpty() && outputFile != sourceFile && outputFile.existsAsFile())
+    if (suffix.isEmpty() && outputFile != originalSourceFile && outputFile.existsAsFile())
         outputFile.deleteFile();
 
     bool success = tempFile.moveFileTo (outputFile);
@@ -402,7 +403,7 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
         if (writeSettingsXml)
         {
             auto root = std::make_unique<juce::DynamicObject>();
-            root->setProperty ("input_file",  sourceFile.getFullPathName());
+            root->setProperty ("input_file",  originalSourceFile.getFullPathName());
             root->setProperty ("output_file", outputFile.getFullPathName());
             root->setProperty ("processed_at", now.formatted ("%Y-%m-%d %H:%M:%S"));
 

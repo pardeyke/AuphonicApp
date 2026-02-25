@@ -361,8 +361,17 @@ void MainComponent::workflowCompleted()
     statusComponent.setProgress (1.0);
     refreshCredits();
 
-    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon,
-        "Success", "Processing complete. Output saved to:\n" + workflow->getLastOutputFile().getFullPathName());
+    auto outputFile = workflow->getLastOutputFile();
+    auto* aw = new juce::AlertWindow ("Success",
+        "Processing complete. Output saved to:\n" + outputFile.getFullPathName(),
+        juce::MessageBoxIconType::InfoIcon);
+    aw->addButton ("OK", 0);
+    aw->addButton ("Show in Finder", 1);
+    aw->enterModalState (true, juce::ModalCallbackFunction::create ([outputFile] (int result)
+    {
+        if (result == 1)
+            outputFile.revealToUser();
+    }), true);
 }
 
 void MainComponent::workflowFailed (const juce::String& errorMessage)
