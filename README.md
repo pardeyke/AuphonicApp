@@ -4,6 +4,10 @@
 
 <h1 align="center">AuphonicApp</h1>
 
+<p align="center">
+  <img src="Packaging/Preview.png" width="520" alt="AuphonicApp preview">
+</p>
+
 A lightweight macOS desktop client for [Auphonic](https://auphonic.com) audio post-production. Drag in an audio file, pick your settings, and let Auphonic handle the rest.
 
 ## Features

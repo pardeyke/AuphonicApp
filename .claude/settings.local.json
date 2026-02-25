@@ -16,7 +16,8 @@
       "Bash(gh repo:*)",
       "Bash(git tag:*)",
       "Bash(gh release:*)",
-      "WebFetch(domain:juce.com)"
+      "WebFetch(domain:juce.com)",
+      "Bash(ls:*)"
     ]
   }
 }
