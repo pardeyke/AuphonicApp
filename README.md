@@ -29,3 +29,9 @@ cmake -B build
 # Distribute
 ./Packaging/build.sh && ./Packaging/distribute.sh
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+Built with [JUCE](https://juce.com), used under the JUCE Starter Licence.
