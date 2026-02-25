@@ -15,7 +15,8 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
                                  const juce::String& presetUuid,
                                  const juce::var& manualSettings,
                                  bool avoidOverwriteFlag,
-                                 bool writeSettingsXmlFlag)
+                                 bool writeSettingsXmlFlag,
+                                 int channelToExtract)
 {
     cancel();
 
@@ -28,6 +29,8 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
     targetExtension = {};
     avoidOverwrite   = avoidOverwriteFlag;
     writeSettingsXml = writeSettingsXmlFlag;
+    extractChannel = channelToExtract;
+    extractedTempFile = juce::File();
 
     // Resolve "keep" output format based on source file extension
     if (settings.getProperty ("output_format", {}).toString() == "keep")
@@ -53,13 +56,23 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
             obj->setProperty ("output_format", apiFormat);
     }
 
-    stepCreateProduction();
+    if (extractChannel > 0)
+        stepExtractChannel();
+    else
+        stepCreateProduction();
 }
 
 void ProcessingWorkflow::cancel()
 {
     cancelled = true;
     stopTimer();
+
+    if (extractedTempFile.existsAsFile())
+    {
+        extractedTempFile.deleteFile();
+        extractedTempFile = juce::File();
+    }
+
     setState (State::Idle);
 }
 
@@ -76,6 +89,111 @@ void ProcessingWorkflow::setError (const juce::String& message)
     setState (State::Error);
     if (listener)
         listener->workflowFailed (message);
+}
+
+void ProcessingWorkflow::stepExtractChannel()
+{
+    setState (State::ExtractingChannel);
+    if (listener)
+        listener->workflowProgressChanged (-1.0, "Extracting channel " + juce::String (extractChannel) + "...");
+
+    int channel = extractChannel;
+
+    juce::Thread::launch ([this, channel]
+    {
+        juce::AudioFormatManager mgr;
+        mgr.registerBasicFormats();
+
+        bool success = false;
+        juce::String error;
+
+        if (auto* reader = mgr.createReaderFor (sourceFile))
+        {
+            std::unique_ptr<juce::AudioFormatReader> readerOwner (reader);
+
+            if (channel < 1 || channel > (int) reader->numChannels)
+            {
+                error = "Channel " + juce::String (channel) + " does not exist in this file";
+            }
+            else
+            {
+                auto tempFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                    .getChildFile ("auphonic_ch_" + juce::String (juce::Random::getSystemRandom().nextInt64()) + ".wav");
+
+                juce::WavAudioFormat wavFormat;
+                auto os = std::make_unique<juce::FileOutputStream> (tempFile);
+
+                if (os->openedOk())
+                {
+                    if (auto* writer = wavFormat.createWriterFor (
+                            os.get(),
+                            reader->sampleRate,
+                            1, // mono output
+                            static_cast<int> (reader->bitsPerSample),
+                            reader->metadataValues,
+                            0))
+                    {
+                        os.release(); // writer owns the stream
+                        std::unique_ptr<juce::AudioFormatWriter> writerOwner (writer);
+
+                        const int blockSize = 65536;
+                        juce::AudioBuffer<float> buffer (static_cast<int> (reader->numChannels), blockSize);
+                        juce::AudioBuffer<float> monoBuffer (1, blockSize);
+                        juce::int64 samplesRemaining = reader->lengthInSamples;
+                        juce::int64 startSample = 0;
+                        int srcChannel = channel - 1; // 0-indexed
+
+                        success = true;
+                        while (samplesRemaining > 0)
+                        {
+                            int samplesToRead = (int) juce::jmin ((juce::int64) blockSize, samplesRemaining);
+                            if (! reader->read (&buffer, 0, samplesToRead, startSample, true, true))
+                            {
+                                success = false;
+                                error = "Failed to read source audio";
+                                break;
+                            }
+
+                            monoBuffer.copyFrom (0, 0, buffer, srcChannel, 0, samplesToRead);
+
+                            if (! writer->writeFromAudioSampleBuffer (monoBuffer, 0, samplesToRead))
+                            {
+                                success = false;
+                                error = "Failed to write extracted channel";
+                                break;
+                            }
+
+                            startSample += samplesToRead;
+                            samplesRemaining -= samplesToRead;
+                        }
+
+                        if (success)
+                        {
+                            juce::MessageManager::callAsync ([this, tempFile]
+                            {
+                                if (cancelled) return;
+                                extractedTempFile = tempFile;
+                                sourceFile = tempFile; // upload the extracted mono file
+                                stepCreateProduction();
+                            });
+                            return;
+                        }
+                    }
+                    else { error = "Could not create WAV writer"; }
+                }
+                else { error = "Could not create temp file for channel extraction"; }
+
+                tempFile.deleteFile();
+            }
+        }
+        else { error = "Could not read source file"; }
+
+        juce::MessageManager::callAsync ([this, error]
+        {
+            if (cancelled) return;
+            setError ("Channel extraction failed: " + error);
+        });
+    });
 }
 
 void ProcessingWorkflow::stepCreateProduction()
@@ -106,6 +224,13 @@ void ProcessingWorkflow::stepUpload()
         {
             if (cancelled) return;
             if (! success) { setError ("Upload failed: " + error); return; }
+
+            // Clean up extracted temp file after successful upload
+            if (extractedTempFile.existsAsFile())
+            {
+                extractedTempFile.deleteFile();
+                extractedTempFile = juce::File();
+            }
 
             stepStart();
         });

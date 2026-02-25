@@ -9,6 +9,7 @@ public:
     enum class State
     {
         Idle,
+        ExtractingChannel,
         CreatingProduction,
         Uploading,
         Starting,
@@ -36,7 +37,8 @@ public:
                 const juce::String& presetUuid,
                 const juce::var& manualSettings,
                 bool avoidOverwrite,
-                bool writeSettingsXml);
+                bool writeSettingsXml,
+                int channelToExtract = 0);
     void cancel();
 
     State getState() const { return state; }
@@ -49,6 +51,7 @@ private:
     void setState (State newState);
     void setError (const juce::String& message);
 
+    void stepExtractChannel();
     void stepCreateProduction();
     void stepUpload();
     void stepStart();
@@ -70,6 +73,8 @@ private:
     bool avoidOverwrite   = false;
     bool writeSettingsXml = false;
     bool cancelled = false;
+    int extractChannel = 0;      // 0 = all channels, 1-N = specific channel
+    juce::File extractedTempFile; // temp mono file when extracting a channel
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProcessingWorkflow)
 };

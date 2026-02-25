@@ -26,6 +26,9 @@ MainComponent::MainComponent (const juce::File& initialFile)
     fileDropComponent.onFileSelected = [this] (const juce::File& f)
     {
         creditsComponent.setFile (f);
+        manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
+        manualOptionsComponent.setSize (optionsViewport.getMaximumVisibleWidth(),
+                                        manualOptionsComponent.getRequiredHeight());
         updateButtonStates();
     };
     presetListComponent.onSelectionChanged = [this]
@@ -65,6 +68,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     {
         fileDropComponent.setFile (initialFile);
         creditsComponent.setFile (initialFile);
+        manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
     }
 
     // Restore manual settings before presets load (presets restore happens in refreshPresets callback)
@@ -232,7 +236,8 @@ void MainComponent::onProcessClicked()
     saveCurrentConfig();
     workflow->start (file, presetUuid, manualSettings,
                      manualOptionsComponent.shouldAvoidOverwrite(),
-                     manualOptionsComponent.shouldWriteSettingsXml());
+                     manualOptionsComponent.shouldWriteSettingsXml(),
+                     manualOptionsComponent.getSelectedChannel());
 }
 
 void MainComponent::onCancelClicked()

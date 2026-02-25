@@ -27,6 +27,11 @@ namespace
 
 ManualOptionsComponent::ManualOptionsComponent()
 {
+    // ── Channel Selector (hidden by default, shown for multi-channel files) ──
+    addChildComponent (channelLabel);
+    addChildComponent (channelCombo);
+    channelCombo.onChange = [this] { notifyChange(); };
+
     // ── Adaptive Leveler ──
     addAndMakeVisible (levelerToggle);
     levelerToggle.setToggleState (true, juce::dontSendNotification);
@@ -392,6 +397,15 @@ void ManualOptionsComponent::resized()
 
     auto toggleWidth = [] (const juce::ToggleButton& t) { return 36 + 8 + (int) juce::Font (juce::FontOptions (13.0f)).getStringWidthFloat (t.getButtonText()) + 4; };
 
+    // ── Channel Selector ──
+    if (channelCombo.isVisible())
+    {
+        auto row = area.removeFromTop (rowH);
+        channelLabel.setBounds (row.removeFromLeft (70));
+        channelCombo.setBounds (row.removeFromLeft (180));
+        area.removeFromTop (gap);
+    }
+
     // ── Leveler ──
     { auto row = area.removeFromTop (rowH); levelerToggle.setBounds (row.removeFromLeft (toggleWidth (levelerToggle))); }
     area.removeFromTop (gap);
@@ -570,6 +584,9 @@ int ManualOptionsComponent::getRequiredHeight() const
 {
     int h = 0;
     auto addRow = [&] { h += rowH + gap; };
+
+    // Channel selector
+    if (channelCombo.isVisible()) addRow();
 
     // Leveler toggle
     addRow();
@@ -767,6 +784,7 @@ juce::var ManualOptionsComponent::getWidgetState() const
     state->setProperty ("outputBitrate",   bitrateCombo.getSelectedId());
     state->setProperty ("avoidOverwrite",  avoidOverwriteToggle.getToggleState());
     state->setProperty ("writeXml",        writeXmlToggle.getToggleState());
+    state->setProperty ("selectedChannel", channelCombo.getSelectedId());
 
     return juce::var (state.release());
 }
@@ -819,6 +837,7 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
     setCombo (bitrateCombo, "outputBitrate", 0);
     setToggle (avoidOverwriteToggle, "avoidOverwrite", false);
     setToggle (writeXmlToggle, "writeXml", false);
+    setCombo (channelCombo, "selectedChannel", 1);
 
     suppressCallbacks = false;
     updateDependentVisibility();
@@ -829,6 +848,40 @@ void ManualOptionsComponent::selectKeepFormat()
     outputFormatCombo.setSelectedId (10, juce::dontSendNotification);
     populateBitrateCombo();
     updateDependentVisibility();
+}
+
+void ManualOptionsComponent::setFileChannelCount (int numChannels)
+{
+    currentFileChannels = numChannels;
+    channelCombo.clear (juce::dontSendNotification);
+
+    bool show = numChannels >= 2;
+    channelLabel.setVisible (show);
+    channelCombo.setVisible (show);
+
+    if (show)
+    {
+        channelCombo.addItem ("All Channels", 1);
+        for (int ch = 1; ch <= numChannels; ++ch)
+        {
+            juce::String name = "Channel " + juce::String (ch);
+            if (numChannels == 2)
+                name += (ch == 1 ? " (Left)" : " (Right)");
+            channelCombo.addItem (name, ch + 1); // id 2 = ch 1, id 3 = ch 2, etc.
+        }
+        channelCombo.setSelectedId (1, juce::dontSendNotification);
+    }
+
+    setSize (getWidth(), getRequiredHeight());
+    resized();
+}
+
+int ManualOptionsComponent::getSelectedChannel() const
+{
+    if (! channelCombo.isVisible())
+        return 0;
+    int id = channelCombo.getSelectedId();
+    return (id <= 1) ? 0 : (id - 1); // id 1 = All (0), id 2 = ch 1, id 3 = ch 2, etc.
 }
 
 void ManualOptionsComponent::notifyChange()

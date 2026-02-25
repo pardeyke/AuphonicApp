@@ -13,6 +13,7 @@ public:
 
     void setCredits (const UserCredits& credits);
     void setFile (const juce::File& file);
+    int getFileChannels() const { return fileChannels; }
 
 private:
     static juce::String formatTime (double hours);

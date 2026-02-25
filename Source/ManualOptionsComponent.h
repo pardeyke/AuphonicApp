@@ -21,6 +21,9 @@ public:
 
     void selectKeepFormat();
 
+    void setFileChannelCount (int numChannels);
+    int getSelectedChannel() const;
+
     bool shouldAvoidOverwrite() const  { return avoidOverwriteToggle.getToggleState(); }
     bool shouldWriteSettingsXml() const { return writeXmlToggle.getToggleState(); }
 
@@ -41,6 +44,11 @@ private:
     static constexpr int indent = 24;
 
     juce::Label separatorLabel { {}, "Settings:" };
+
+    // --- Channel Selector ---
+    juce::Label channelLabel { {}, "Channel:" };
+    juce::ComboBox channelCombo;
+    int currentFileChannels = 0;
 
     // --- Adaptive Leveler ---
     juce::ToggleButton levelerToggle { "Adaptive Leveler" };
