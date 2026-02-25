@@ -6,6 +6,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     addAndMakeVisible (settingsButton);
     addAndMakeVisible (fileDropComponent);
     addAndMakeVisible (audioPlayerComponent);
+    addAndMakeVisible (previewDurationComponent);
     addAndMakeVisible (creditsComponent);
     addAndMakeVisible (presetListComponent);
     addAndMakeVisible (savePresetButton);
@@ -29,10 +30,17 @@ MainComponent::MainComponent (const juce::File& initialFile)
         audioPlayerComponent.clearProcessedFile();
         audioPlayerComponent.loadFile (f);
         creditsComponent.setFile (f);
+        previewDurationComponent.setFileDuration (creditsComponent.getFileDurationSeconds());
+        creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
         manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
         manualOptionsComponent.setSize (optionsViewport.getMaximumVisibleWidth(),
                                         manualOptionsComponent.getRequiredHeight());
         updateButtonStates();
+    };
+
+    previewDurationComponent.onChange = [this]
+    {
+        creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
     };
     presetListComponent.onSelectionChanged = [this]
     {
@@ -107,7 +115,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     audioPlayerComponent.setOutputDevice (settingsManager.getAudioOutputDevice());
 
     updateButtonStates();
-    setSize (520, 788);
+    setSize (520, 822);
 }
 
 MainComponent::~MainComponent()
@@ -146,6 +154,11 @@ void MainComponent::resized()
 
     // Audio player
     audioPlayerComponent.setBounds (area.removeFromTop (100));
+
+    area.removeFromTop (8);
+
+    // Preview duration
+    previewDurationComponent.setBounds (area.removeFromTop (26));
 
     area.removeFromTop (8);
 
@@ -257,7 +270,8 @@ void MainComponent::onProcessClicked()
     workflow->start (file, presetUuid, manualSettings,
                      manualOptionsComponent.shouldAvoidOverwrite(),
                      manualOptionsComponent.shouldWriteSettingsXml(),
-                     manualOptionsComponent.getSelectedChannel());
+                     manualOptionsComponent.getSelectedChannel(),
+                     previewDurationComponent.getPreviewDurationSeconds());
 }
 
 void MainComponent::onCancelClicked()

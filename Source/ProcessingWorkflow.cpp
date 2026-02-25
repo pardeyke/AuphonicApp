@@ -16,7 +16,8 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
                                  const juce::var& manualSettings,
                                  bool avoidOverwriteFlag,
                                  bool writeSettingsXmlFlag,
-                                 int channelToExtract)
+                                 int channelToExtract,
+                                 double previewDuration)
 {
     cancel();
 
@@ -31,7 +32,9 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
     avoidOverwrite   = avoidOverwriteFlag;
     writeSettingsXml = writeSettingsXmlFlag;
     extractChannel = channelToExtract;
+    previewDurationSeconds = previewDuration;
     extractedTempFile = juce::File();
+    trimmedTempFile = juce::File();
 
     // Resolve "keep" output format based on source file extension
     if (settings.getProperty ("output_format", {}).toString() == "keep")
@@ -59,6 +62,8 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
 
     if (extractChannel > 0)
         stepExtractChannel();
+    else if (previewDurationSeconds > 0.0)
+        stepTrimPreview();
     else
         stepCreateProduction();
 }
@@ -72,6 +77,12 @@ void ProcessingWorkflow::cancel()
     {
         extractedTempFile.deleteFile();
         extractedTempFile = juce::File();
+    }
+
+    if (trimmedTempFile.existsAsFile())
+    {
+        trimmedTempFile.deleteFile();
+        trimmedTempFile = juce::File();
     }
 
     setState (State::Idle);
@@ -175,7 +186,11 @@ void ProcessingWorkflow::stepExtractChannel()
                                 if (cancelled) return;
                                 extractedTempFile = tempFile;
                                 sourceFile = tempFile; // upload the extracted mono file
-                                stepCreateProduction();
+
+                                if (previewDurationSeconds > 0.0)
+                                    stepTrimPreview();
+                                else
+                                    stepCreateProduction();
                             });
                             return;
                         }
@@ -193,6 +208,104 @@ void ProcessingWorkflow::stepExtractChannel()
         {
             if (cancelled) return;
             setError ("Channel extraction failed: " + error);
+        });
+    });
+}
+
+void ProcessingWorkflow::stepTrimPreview()
+{
+    setState (State::Trimming);
+    if (listener)
+        listener->workflowProgressChanged (-1.0, "Trimming to " + juce::String (juce::roundToInt (previewDurationSeconds)) + "s preview...");
+
+    double trimSeconds = previewDurationSeconds;
+
+    juce::Thread::launch ([this, trimSeconds]
+    {
+        juce::AudioFormatManager mgr;
+        mgr.registerBasicFormats();
+
+        bool success = false;
+        juce::String error;
+
+        if (auto* reader = mgr.createReaderFor (sourceFile))
+        {
+            std::unique_ptr<juce::AudioFormatReader> readerOwner (reader);
+
+            juce::int64 samplesToWrite = (juce::int64) (reader->sampleRate * trimSeconds);
+            if (samplesToWrite > reader->lengthInSamples)
+                samplesToWrite = reader->lengthInSamples;
+
+            auto tempFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                .getChildFile ("auphonic_trim_" + juce::String (juce::Random::getSystemRandom().nextInt64()) + ".wav");
+
+            juce::WavAudioFormat wavFormat;
+            auto os = std::make_unique<juce::FileOutputStream> (tempFile);
+
+            if (os->openedOk())
+            {
+                if (auto* writer = wavFormat.createWriterFor (
+                        os.get(),
+                        reader->sampleRate,
+                        reader->numChannels,
+                        static_cast<int> (reader->bitsPerSample),
+                        reader->metadataValues,
+                        0))
+                {
+                    os.release(); // writer owns the stream
+                    std::unique_ptr<juce::AudioFormatWriter> writerOwner (writer);
+
+                    const int blockSize = 65536;
+                    juce::AudioBuffer<float> buffer (static_cast<int> (reader->numChannels), blockSize);
+                    juce::int64 samplesRemaining = samplesToWrite;
+                    juce::int64 startSample = 0;
+
+                    success = true;
+                    while (samplesRemaining > 0)
+                    {
+                        int samplesToRead = (int) juce::jmin ((juce::int64) blockSize, samplesRemaining);
+                        if (! reader->read (&buffer, 0, samplesToRead, startSample, true, true))
+                        {
+                            success = false;
+                            error = "Failed to read source audio";
+                            break;
+                        }
+
+                        if (! writer->writeFromAudioSampleBuffer (buffer, 0, samplesToRead))
+                        {
+                            success = false;
+                            error = "Failed to write trimmed audio";
+                            break;
+                        }
+
+                        startSample += samplesToRead;
+                        samplesRemaining -= samplesToRead;
+                    }
+
+                    if (success)
+                    {
+                        juce::MessageManager::callAsync ([this, tempFile]
+                        {
+                            if (cancelled) return;
+                            trimmedTempFile = tempFile;
+                            sourceFile = tempFile;
+                            stepCreateProduction();
+                        });
+                        return;
+                    }
+                }
+                else { error = "Could not create WAV writer"; }
+            }
+            else { error = "Could not create temp file for trimming"; }
+
+            tempFile.deleteFile();
+        }
+        else { error = "Could not read source file"; }
+
+        juce::MessageManager::callAsync ([this, error]
+        {
+            if (cancelled) return;
+            setError ("Preview trimming failed: " + error);
         });
     });
 }
@@ -226,11 +339,16 @@ void ProcessingWorkflow::stepUpload()
             if (cancelled) return;
             if (! success) { setError ("Upload failed: " + error); return; }
 
-            // Clean up extracted temp file after successful upload
+            // Clean up temp files after successful upload
             if (extractedTempFile.existsAsFile())
             {
                 extractedTempFile.deleteFile();
                 extractedTempFile = juce::File();
+            }
+            if (trimmedTempFile.existsAsFile())
+            {
+                trimmedTempFile.deleteFile();
+                trimmedTempFile = juce::File();
             }
 
             stepStart();

@@ -37,6 +37,7 @@ target_sources(AuphonicApp PRIVATE
     Source/CreditsComponent.cpp
     Source/MacStyleLookAndFeel.cpp
     Source/AudioPlayerComponent.cpp
+    Source/PreviewDurationComponent.cpp
 )
 
 target_compile_definitions(AuphonicApp PRIVATE

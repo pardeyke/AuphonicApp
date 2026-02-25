@@ -11,6 +11,7 @@
 #include "StatusComponent.h"
 #include "CreditsComponent.h"
 #include "AudioPlayerComponent.h"
+#include "PreviewDurationComponent.h"
 
 class MainComponent : public juce::Component,
                       public ProcessingWorkflow::Listener
@@ -50,6 +51,7 @@ private:
 
     FileDropComponent fileDropComponent;
     AudioPlayerComponent audioPlayerComponent;
+    PreviewDurationComponent previewDurationComponent;
     CreditsComponent creditsComponent;
     PresetListComponent presetListComponent;
     juce::TextButton savePresetButton { "Save Preset" };

@@ -51,6 +51,12 @@ void CreditsComponent::setFile (const juce::File& file)
     repaint();
 }
 
+void CreditsComponent::setPreviewDurationSeconds (double seconds)
+{
+    previewDuration = seconds;
+    repaint();
+}
+
 void CreditsComponent::paint (juce::Graphics& g)
 {
     if (availableCredits < 0.0)
@@ -67,20 +73,26 @@ void CreditsComponent::paint (juce::Graphics& g)
 
     if (fileLoaded)
     {
-        // File cost
-        int durationSecs = juce::roundToInt (fileDurationSeconds);
+        // Use preview duration if set, otherwise full file duration
+        double displayDuration = (previewDuration > 0.0) ? previewDuration : fileDurationSeconds;
+        double displayCostHours = displayDuration / 3600.0;
+
+        int durationSecs = juce::roundToInt (displayDuration);
         int mins = durationSecs / 60;
         int secs = durationSecs % 60;
         juce::String costText = "This file: " + juce::String (mins) + "m "
                               + juce::String (secs) + "s ("
                               + juce::String (fileChannels) + "ch)";
 
+        if (previewDuration > 0.0)
+            costText += " [preview]";
+
         g.drawText (costText,
                     area.removeFromLeft (area.getWidth() / 2),
                     juce::Justification::centred, true);
 
         // After processing
-        double remaining = availableCredits - fileCostHours;
+        double remaining = availableCredits - displayCostHours;
         if (remaining < 0.0)
             g.setColour (juce::Colours::red);
 

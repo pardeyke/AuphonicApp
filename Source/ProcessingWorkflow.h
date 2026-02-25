@@ -10,6 +10,7 @@ public:
     {
         Idle,
         ExtractingChannel,
+        Trimming,
         CreatingProduction,
         Uploading,
         Starting,
@@ -38,7 +39,8 @@ public:
                 const juce::var& manualSettings,
                 bool avoidOverwrite,
                 bool writeSettingsXml,
-                int channelToExtract = 0);
+                int channelToExtract = 0,
+                double previewDuration = 0.0);
     void cancel();
 
     State getState() const { return state; }
@@ -52,6 +54,7 @@ private:
     void setError (const juce::String& message);
 
     void stepExtractChannel();
+    void stepTrimPreview();
     void stepCreateProduction();
     void stepUpload();
     void stepStart();
@@ -76,7 +79,9 @@ private:
     bool writeSettingsXml = false;
     bool cancelled = false;
     int extractChannel = 0;      // 0 = all channels, 1-N = specific channel
+    double previewDurationSeconds = 0.0; // 0 = full file
     juce::File extractedTempFile; // temp mono file when extracting a channel
+    juce::File trimmedTempFile;   // temp file when trimming for preview
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProcessingWorkflow)
 };

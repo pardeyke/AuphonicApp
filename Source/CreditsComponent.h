@@ -14,6 +14,8 @@ public:
     void setCredits (const UserCredits& credits);
     void setFile (const juce::File& file);
     int getFileChannels() const { return fileChannels; }
+    double getFileDurationSeconds() const { return fileDurationSeconds; }
+    void setPreviewDurationSeconds (double seconds);
 
 private:
     static juce::String formatTime (double hours);
@@ -22,6 +24,7 @@ private:
     double fileCostHours = 0.0;
     int fileChannels = 0;
     double fileDurationSeconds = 0.0;
+    double previewDuration = 0.0;
     bool fileLoaded = false;
 
     juce::AudioFormatManager formatManager;
