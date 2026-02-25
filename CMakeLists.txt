@@ -36,6 +36,7 @@ target_sources(AuphonicApp PRIVATE
     Source/FileDropComponent.cpp
     Source/CreditsComponent.cpp
     Source/MacStyleLookAndFeel.cpp
+    Source/AudioPlayerComponent.cpp
 )
 
 target_compile_definitions(AuphonicApp PRIVATE
@@ -51,7 +52,9 @@ target_link_libraries(AuphonicApp PRIVATE
     juce::juce_gui_basics
     juce::juce_gui_extra
     juce::juce_audio_basics
+    juce::juce_audio_devices
     juce::juce_audio_formats
+    juce::juce_audio_utils
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags
 )

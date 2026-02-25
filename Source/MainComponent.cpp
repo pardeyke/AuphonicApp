@@ -5,6 +5,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
 {
     addAndMakeVisible (settingsButton);
     addAndMakeVisible (fileDropComponent);
+    addAndMakeVisible (audioPlayerComponent);
     addAndMakeVisible (creditsComponent);
     addAndMakeVisible (presetListComponent);
     addAndMakeVisible (savePresetButton);
@@ -25,6 +26,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
 
     fileDropComponent.onFileSelected = [this] (const juce::File& f)
     {
+        audioPlayerComponent.loadFile (f);
         creditsComponent.setFile (f);
         manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
         manualOptionsComponent.setSize (optionsViewport.getMaximumVisibleWidth(),
@@ -67,6 +69,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     if (initialFile.existsAsFile())
     {
         fileDropComponent.setFile (initialFile);
+        audioPlayerComponent.loadFile (initialFile);
         creditsComponent.setFile (initialFile);
         manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
     }
@@ -101,7 +104,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     }
 
     updateButtonStates();
-    setSize (520, 680);
+    setSize (520, 788);
 }
 
 MainComponent::~MainComponent()
@@ -124,6 +127,11 @@ void MainComponent::resized()
 
     // File drop area
     fileDropComponent.setBounds (area.removeFromTop (60));
+
+    area.removeFromTop (8);
+
+    // Audio player
+    audioPlayerComponent.setBounds (area.removeFromTop (100));
 
     area.removeFromTop (8);
 
@@ -229,6 +237,7 @@ void MainComponent::onProcessClicked()
         manualSettings = manualOptionsComponent.getSettings();
     }
 
+    audioPlayerComponent.stop();
     saveCurrentConfig();
     workflow->start (file, presetUuid, manualSettings,
                      manualOptionsComponent.shouldAvoidOverwrite(),

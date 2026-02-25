@@ -10,6 +10,7 @@
 #include "ManualOptionsComponent.h"
 #include "StatusComponent.h"
 #include "CreditsComponent.h"
+#include "AudioPlayerComponent.h"
 
 class MainComponent : public juce::Component,
                       public ProcessingWorkflow::Listener
@@ -47,6 +48,7 @@ private:
     juce::TextButton settingsButton { juce::String::charToString (0x2699) + juce::String::charToString (0xFE0F) };
 
     FileDropComponent fileDropComponent;
+    AudioPlayerComponent audioPlayerComponent;
     CreditsComponent creditsComponent;
     PresetListComponent presetListComponent;
     juce::TextButton savePresetButton { "Save Preset" };
