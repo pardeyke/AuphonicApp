@@ -17,7 +17,8 @@
       "Bash(git tag:*)",
       "Bash(gh release:*)",
       "WebFetch(domain:juce.com)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(find /Users/aloysius/Projects/AuphonicApp -maxdepth 2 -type f \\\\\\(-name *.md -o -name CLAUDE.md -o -name .claude* \\\\\\))"
     ]
   }
 }

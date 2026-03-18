@@ -282,11 +282,9 @@ static int dbComboToApiValue (const juce::ComboBox& combo)
 
 static int strengthComboToApiValue (const juce::ComboBox& combo)
 {
-    // id 1 = 100%, id 2 = 90%, ... id 11 = 0%
+    // IDs are 101 - pct: id 1 = 100%, id 11 = 90%, id 21 = 80%, ... id 101 = 0%
     int id = combo.getSelectedId();
-    if (id >= 1 && id <= 11)
-        return 100 - (id - 1) * 10;
-    return 100;
+    return juce::jlimit (0, 100, 101 - id);
 }
 
 static juce::String compressorComboToApiValue (const juce::ComboBox& combo)
