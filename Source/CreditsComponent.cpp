@@ -22,7 +22,8 @@ juce::String CreditsComponent::formatTime (double hours)
 
 void CreditsComponent::setCredits (const UserCredits& credits)
 {
-    availableCredits = credits.credits;
+    // Subtract 2 free hours (watermarked) to show only paid credits
+    availableCredits = credits.credits - 2.0;
     repaint();
 }
 
