@@ -13,6 +13,7 @@ A lightweight macOS desktop client for [Auphonic](https://auphonic.com) audio po
 - **Manual processing controls** — adaptive leveler, noise reduction, loudness normalization, filtering, music/speech separation, and broadcast mode
 - **Channel selection** — process individual channels from multi-channel files
 - **Output format & bitrate** — choose your format or keep the original
+- **Batch Processing**
 - **Credit tracking** — see available credits and estimated cost before processing
 - **Progress feedback** — real-time status during upload, processing, and download
 - **Show in Finder** — reveal the output file when done
