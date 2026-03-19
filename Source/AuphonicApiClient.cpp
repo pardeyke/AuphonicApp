@@ -181,13 +181,14 @@ void AuphonicApiClient::savePreset (const juce::String& name,
 
 void AuphonicApiClient::createProduction (const juce::String& presetUuid,
                                            const juce::var& manualSettings,
+                                           const juce::String& title,
                                            ProductionCallback callback)
 {
-    juce::Thread::launch ([this, presetUuid, manualSettings, callback]
+    juce::Thread::launch ([this, presetUuid, manualSettings, title, callback]
     {
         auto json = std::make_unique<juce::DynamicObject>();
 
-        json->setProperty ("title", "");
+        json->setProperty ("title", title);
 
         if (presetUuid.isNotEmpty())
             json->setProperty ("preset", presetUuid);

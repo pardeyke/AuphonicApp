@@ -318,7 +318,7 @@ void ProcessingWorkflow::stepCreateProduction()
     if (listener)
         listener->workflowProgressChanged (-1.0, "Creating production...");
 
-    api.createProduction (presetId, settings,
+    api.createProduction (presetId, settings, originalSourceFile.getFileNameWithoutExtension(),
         [this] (bool success, const juce::String& uuid, const juce::String& error)
         {
             if (cancelled) return;

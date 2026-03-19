@@ -49,6 +49,7 @@ public:
     using ProductionCallback = std::function<void (bool success, const juce::String& uuid, const juce::String& error)>;
     void createProduction (const juce::String& presetUuid,
                            const juce::var& manualSettings,
+                           const juce::String& title,
                            ProductionCallback callback);
 
     using UploadCallback = std::function<void (bool success, const juce::String& error)>;
