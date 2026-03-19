@@ -13,6 +13,7 @@ public:
 
     void setCredits (const UserCredits& credits);
     void setFile (const juce::File& file);
+    void setFiles (const juce::Array<juce::File>& files);
     int getFileChannels() const { return fileChannels; }
     double getFileDurationSeconds() const { return fileDurationSeconds; }
     void setPreviewDurationSeconds (double seconds);
@@ -26,6 +27,10 @@ private:
     double fileDurationSeconds = 0.0;
     double previewDuration = 0.0;
     bool fileLoaded = false;
+
+    // Batch info
+    int batchFileCount = 0;
+    double batchTotalDurationSeconds = 0.0;
 
     juce::AudioFormatManager formatManager;
 

@@ -33,6 +33,8 @@ void CreditsComponent::setFile (const juce::File& file)
     fileChannels = 0;
     fileDurationSeconds = 0.0;
     fileLoaded = false;
+    batchFileCount = 0;
+    batchTotalDurationSeconds = 0.0;
 
     if (file.existsAsFile())
     {
@@ -49,6 +51,27 @@ void CreditsComponent::setFile (const juce::File& file)
         }
     }
 
+    repaint();
+}
+
+void CreditsComponent::setFiles (const juce::Array<juce::File>& files)
+{
+    batchFileCount = files.size();
+    batchTotalDurationSeconds = 0.0;
+
+    for (auto& file : files)
+    {
+        if (file.existsAsFile())
+        {
+            std::unique_ptr<juce::AudioFormatReader> reader (formatManager.createReaderFor (file));
+            if (reader != nullptr)
+                batchTotalDurationSeconds += (double) reader->lengthInSamples / reader->sampleRate;
+        }
+    }
+
+    fileCostHours = batchTotalDurationSeconds / 3600.0;
+    fileDurationSeconds = batchTotalDurationSeconds;
+    fileLoaded = batchFileCount > 0;
     repaint();
 }
 
@@ -74,30 +97,63 @@ void CreditsComponent::paint (juce::Graphics& g)
 
     if (fileLoaded)
     {
-        // Use preview duration if set, otherwise full file duration
-        double displayDuration = (previewDuration > 0.0) ? previewDuration : fileDurationSeconds;
-        double displayCostHours = displayDuration / 3600.0;
+        juce::String costText;
 
-        int durationSecs = juce::roundToInt (displayDuration);
-        int mins = durationSecs / 60;
-        int secs = durationSecs % 60;
-        juce::String costText = "This file: " + juce::String (mins) + "m "
-                              + juce::String (secs) + "s ("
-                              + juce::String (fileChannels) + "ch)";
+        if (batchFileCount > 1)
+        {
+            // Batch mode: show total for all files
+            double displayDuration = (previewDuration > 0.0)
+                ? previewDuration * batchFileCount
+                : batchTotalDurationSeconds;
+            double displayCostHours = displayDuration / 3600.0;
 
-        if (previewDuration > 0.0)
-            costText += " [preview]";
+            int durationSecs = juce::roundToInt (displayDuration);
+            int mins = durationSecs / 60;
+            int secs = durationSecs % 60;
+            costText = juce::String (batchFileCount) + " files, ~"
+                     + juce::String (mins) + "m " + juce::String (secs) + "s total";
 
-        g.drawText (costText,
-                    area.removeFromLeft (area.getWidth() / 2),
-                    juce::Justification::centred, true);
+            if (previewDuration > 0.0)
+                costText += " [preview]";
 
-        // After processing
-        double remaining = availableCredits - displayCostHours;
-        if (remaining < 0.0)
-            g.setColour (juce::Colours::red);
+            g.drawText (costText,
+                        area.removeFromLeft (area.getWidth() / 2),
+                        juce::Justification::centred, true);
 
-        g.drawText ("After: " + formatTime (remaining),
-                    area, juce::Justification::centredRight, true);
+            double remaining = availableCredits - displayCostHours;
+            if (remaining < 0.0)
+                g.setColour (juce::Colours::red);
+
+            g.drawText ("After: " + formatTime (remaining),
+                        area, juce::Justification::centredRight, true);
+        }
+        else
+        {
+            // Single file mode (original behavior)
+            double displayDuration = (previewDuration > 0.0) ? previewDuration : fileDurationSeconds;
+            double displayCostHours = displayDuration / 3600.0;
+
+            int durationSecs = juce::roundToInt (displayDuration);
+            int mins = durationSecs / 60;
+            int secs = durationSecs % 60;
+            costText = "This file: " + juce::String (mins) + "m "
+                     + juce::String (secs) + "s ("
+                     + juce::String (fileChannels) + "ch)";
+
+            if (previewDuration > 0.0)
+                costText += " [preview]";
+
+            g.drawText (costText,
+                        area.removeFromLeft (area.getWidth() / 2),
+                        juce::Justification::centred, true);
+
+            // After processing
+            double remaining = availableCredits - displayCostHours;
+            if (remaining < 0.0)
+                g.setColour (juce::Colours::red);
+
+            g.drawText ("After: " + formatTime (remaining),
+                        area, juce::Justification::centredRight, true);
+        }
     }
 }

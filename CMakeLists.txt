@@ -34,7 +34,8 @@ target_sources(AuphonicApp PRIVATE
     Source/PresetListComponent.cpp
     Source/ManualOptionsComponent.cpp
     Source/StatusComponent.cpp
-    Source/FileDropComponent.cpp
+    Source/FileListComponent.cpp
+    Source/BatchWorkflow.cpp
     Source/CreditsComponent.cpp
     Source/MacStyleLookAndFeel.cpp
     Source/AudioPlayerComponent.cpp

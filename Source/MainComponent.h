@@ -4,8 +4,8 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "SettingsManager.h"
 #include "AuphonicApiClient.h"
-#include "ProcessingWorkflow.h"
-#include "FileDropComponent.h"
+#include "BatchWorkflow.h"
+#include "FileListComponent.h"
 #include "PresetListComponent.h"
 #include "ManualOptionsComponent.h"
 #include "StatusComponent.h"
@@ -14,7 +14,7 @@
 #include "PreviewDurationComponent.h"
 
 class MainComponent : public juce::Component,
-                      public ProcessingWorkflow::Listener
+                      public BatchWorkflow::Listener
 {
 public:
     explicit MainComponent (const juce::File& initialFile = {});
@@ -26,11 +26,10 @@ public:
 
     void setFile (const juce::File& file);
 
-    // ProcessingWorkflow::Listener
-    void workflowStateChanged (ProcessingWorkflow::State newState) override;
-    void workflowProgressChanged (double progress, const juce::String& statusText) override;
-    void workflowCompleted() override;
-    void workflowFailed (const juce::String& errorMessage) override;
+    // BatchWorkflow::Listener
+    void batchFileStatusChanged (int index, const juce::String& status) override;
+    void batchProgressChanged (int completed, int total, const juce::String& overallStatus) override;
+    void batchCompleted (const juce::Array<BatchWorkflow::FileResult>& results) override;
 
 private:
     void onSettingsClicked();
@@ -46,11 +45,11 @@ private:
 
     SettingsManager settingsManager;
     std::unique_ptr<AuphonicApiClient> apiClient;
-    std::unique_ptr<ProcessingWorkflow> workflow;
+    std::unique_ptr<BatchWorkflow> batchWorkflow;
 
     juce::TextButton settingsButton { juce::String::charToString (0x2699) + juce::String::charToString (0xFE0F) };
 
-    FileDropComponent fileDropComponent;
+    FileListComponent fileListComponent;
     AudioPlayerComponent audioPlayerComponent;
     PreviewDurationComponent previewDurationComponent;
     CreditsComponent creditsComponent;

@@ -5,8 +5,8 @@
 MainComponent::MainComponent (const juce::File& initialFile)
 {
     addAndMakeVisible (settingsButton);
-    addAndMakeVisible (fileDropComponent);
-    addAndMakeVisible (audioPlayerComponent);
+    addAndMakeVisible (fileListComponent);
+    addChildComponent (audioPlayerComponent);
     addAndMakeVisible (previewDurationComponent);
     addAndMakeVisible (creditsComponent);
     addAndMakeVisible (presetListComponent);
@@ -26,14 +26,36 @@ MainComponent::MainComponent (const juce::File& initialFile)
 
     cancelButton.setEnabled (false);
 
-    fileDropComponent.onFileSelected = [this] (const juce::File& f)
+    fileListComponent.onFilesChanged = [this]
     {
+        auto files = fileListComponent.getFiles();
+
         audioPlayerComponent.clearProcessedFile();
-        audioPlayerComponent.loadFile (f);
-        creditsComponent.setFile (f);
-        previewDurationComponent.setFileDuration (creditsComponent.getFileDurationSeconds());
-        creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
-        manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
+
+        if (files.size() == 1)
+        {
+            audioPlayerComponent.setVisible (true);
+            audioPlayerComponent.loadFile (files[0]);
+            creditsComponent.setFile (files[0]);
+            previewDurationComponent.setFileDuration (creditsComponent.getFileDurationSeconds());
+            creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
+            manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
+        }
+        else
+        {
+            audioPlayerComponent.setVisible (false);
+            creditsComponent.setFiles (files);
+            creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
+            if (! files.isEmpty())
+            {
+                // Use first file for channel count info
+                creditsComponent.setFile (files[0]);
+                manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
+                creditsComponent.setFiles (files); // re-set to show batch info
+            }
+        }
+
+        resized();
         manualOptionsComponent.setSize (optionsViewport.getMaximumVisibleWidth(),
                                         manualOptionsComponent.getRequiredHeight());
         updateButtonStates();
@@ -73,15 +95,14 @@ MainComponent::MainComponent (const juce::File& initialFile)
 
     // Init API client
     apiClient = std::make_unique<AuphonicApiClient> (settingsManager.getApiToken());
-    workflow = std::make_unique<ProcessingWorkflow> (*apiClient);
-    workflow->setListener (this);
+    batchWorkflow = std::make_unique<BatchWorkflow> (*apiClient);
+    batchWorkflow->setListener (this);
 
     if (initialFile.existsAsFile())
     {
-        fileDropComponent.setFile (initialFile);
-        audioPlayerComponent.loadFile (initialFile);
-        creditsComponent.setFile (initialFile);
-        manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
+        juce::Array<juce::File> files;
+        files.add (initialFile);
+        fileListComponent.addFiles (files);
     }
 
     // Restore manual settings before presets load (presets restore happens in refreshPresets callback)
@@ -91,12 +112,12 @@ MainComponent::MainComponent (const juce::File& initialFile)
     audioPlayerComponent.setOutputDevice (settingsManager.getAudioOutputDevice());
 
     updateButtonStates();
-    setSize (520, 822);
+    setSize (520, 862);
 }
 
 MainComponent::~MainComponent()
 {
-    workflow->setListener (nullptr);
+    batchWorkflow->setListener (nullptr);
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
@@ -123,13 +144,15 @@ void MainComponent::resized()
     creditsComponent.setBounds (area.removeFromTop (20));
     area.removeFromTop (6);
 
-    // File drop area
-    fileDropComponent.setBounds (area.removeFromTop (60));
+    // File list area (dynamic height based on file count)
+    fileListComponent.setBounds (area.removeFromTop (fileListComponent.getDesiredHeight()));
 
-    area.removeFromTop (8);
-
-    // Audio player
-    audioPlayerComponent.setBounds (area.removeFromTop (100));
+    // Audio player (only takes space when visible)
+    if (audioPlayerComponent.isVisible())
+    {
+        area.removeFromTop (8);
+        audioPlayerComponent.setBounds (area.removeFromTop (100));
+    }
 
     area.removeFromTop (8);
 
@@ -171,7 +194,9 @@ void MainComponent::resized()
 
 void MainComponent::setFile (const juce::File& file)
 {
-    fileDropComponent.setFile (file);
+    juce::Array<juce::File> files;
+    files.add (file);
+    fileListComponent.addFiles (files);
 }
 
 void MainComponent::onSettingsClicked()
@@ -186,11 +211,11 @@ void MainComponent::onSettingsClicked()
 
 void MainComponent::onProcessClicked()
 {
-    auto file = fileDropComponent.getFile();
-    if (! file.existsAsFile())
+    auto files = fileListComponent.getFiles();
+    if (files.isEmpty())
     {
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-            "No File", "Please select an audio file first.");
+            "No Files", "Please select audio files first.");
         return;
     }
 
@@ -218,17 +243,24 @@ void MainComponent::onProcessClicked()
 
     audioPlayerComponent.stop();
     saveCurrentConfig();
-    workflow->start (file, presetUuid, manualSettings,
-                     manualOptionsComponent.shouldAvoidOverwrite(),
-                     manualOptionsComponent.getOutputSuffix(),
-                     manualOptionsComponent.shouldWriteSettingsXml(),
-                     manualOptionsComponent.getSelectedChannel(),
-                     previewDurationComponent.getPreviewDurationSeconds());
+
+    fileListComponent.setEnabled (false);
+    statusComponent.reset();
+
+    batchWorkflow->start (files, presetUuid, manualSettings,
+                          manualOptionsComponent.shouldAvoidOverwrite(),
+                          manualOptionsComponent.getOutputSuffix(),
+                          manualOptionsComponent.shouldWriteSettingsXml(),
+                          manualOptionsComponent.getSelectedChannel(),
+                          previewDurationComponent.getPreviewDurationSeconds());
+
+    updateButtonStates();
 }
 
 void MainComponent::onCancelClicked()
 {
-    workflow->cancel();
+    batchWorkflow->cancel();
+    fileListComponent.setEnabled (true);
     statusComponent.reset();
     updateButtonStates();
 }
@@ -345,11 +377,9 @@ void MainComponent::restoreLastConfig()
 
 void MainComponent::updateButtonStates()
 {
-    bool isIdle = workflow->getState() == ProcessingWorkflow::State::Idle
-               || workflow->getState() == ProcessingWorkflow::State::Done
-               || workflow->getState() == ProcessingWorkflow::State::Error;
+    bool isIdle = ! batchWorkflow->isRunning();
 
-    processButton.setEnabled (isIdle && fileDropComponent.getFile().existsAsFile());
+    processButton.setEnabled (isIdle && fileListComponent.hasFiles());
     cancelButton.setEnabled (! isIdle);
 
     bool canSavePreset = isIdle
@@ -359,36 +389,82 @@ void MainComponent::updateButtonStates()
     savePresetButton.setEnabled (canSavePreset);
 }
 
-void MainComponent::workflowStateChanged (ProcessingWorkflow::State)
+// BatchWorkflow::Listener
+
+void MainComponent::batchFileStatusChanged (int index, const juce::String& status)
 {
-    updateButtonStates();
+    fileListComponent.setFileStatus (index, status);
 }
 
-void MainComponent::workflowProgressChanged (double progress, const juce::String& statusText)
+void MainComponent::batchProgressChanged (int completed, int total, const juce::String& overallStatus)
 {
-    statusComponent.setStatus (statusText);
-    statusComponent.setProgress (progress);
+    statusComponent.setStatus (overallStatus);
+
+    if (total > 0)
+        statusComponent.setProgress ((double) completed / (double) total);
 }
 
-void MainComponent::workflowCompleted()
+void MainComponent::batchCompleted (const juce::Array<BatchWorkflow::FileResult>& results)
 {
-    auto outputFile = workflow->getLastOutputFile();
-    statusComponent.setStatus ("Complete! Saved to: " + outputFile.getFileName());
+    fileListComponent.setEnabled (true);
     statusComponent.setProgress (-1.0);
-    statusComponent.setOutputFile (outputFile);
+
+    int successCount = 0;
+    int errorCount = 0;
+    for (auto& r : results)
+    {
+        if (r.success)
+            ++successCount;
+        else
+            ++errorCount;
+    }
+
+    if (results.size() == 1)
+    {
+        // Single file — behave like before
+        auto r = results[0];
+        if (r.success)
+        {
+            statusComponent.setStatus ("Complete! Saved to: " + r.outputFile.getFileName());
+            statusComponent.setOutputFile (r.outputFile);
+            audioPlayerComponent.loadProcessedFile (r.outputFile);
+        }
+        else
+        {
+            statusComponent.setStatus ("Error: " + r.errorMessage);
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                "Error", r.errorMessage);
+        }
+    }
+    else
+    {
+        // Batch — show summary
+        juce::String summary = juce::String (successCount) + "/" + juce::String (results.size()) + " files completed";
+        if (errorCount > 0)
+            summary += " (" + juce::String (errorCount) + " failed)";
+
+        statusComponent.setStatus (summary);
+
+        // Show in Finder for the output directory of first successful file
+        for (auto& r : results)
+        {
+            if (r.success && r.outputFile.existsAsFile())
+            {
+                statusComponent.setOutputDirectory (r.outputFile.getParentDirectory());
+                break;
+            }
+        }
+    }
+
     refreshCredits();
 
-    audioPlayerComponent.loadProcessedFile (outputFile);
+    juce::String notifBody;
+    if (results.size() == 1 && results[0].success)
+        notifBody = "Saved to: " + results[0].outputFile.getFileName();
+    else
+        notifBody = juce::String (successCount) + "/" + juce::String (results.size()) + " files processed successfully";
 
-    DesktopNotification::show ("Processing Complete",
-        "Saved to: " + outputFile.getFileName());
-}
+    DesktopNotification::show ("Processing Complete", notifBody);
 
-void MainComponent::workflowFailed (const juce::String& errorMessage)
-{
-    statusComponent.setStatus ("Error: " + errorMessage);
-    statusComponent.setProgress (-1.0);
-
-    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-        "Error", errorMessage);
+    updateButtonStates();
 }

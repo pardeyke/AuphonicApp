@@ -8,7 +8,13 @@ StatusComponent::StatusComponent()
     progressBar.setVisible (false);
 
     addChildComponent (showInFinderButton);
-    showInFinderButton.onClick = [this] { outputFile.revealToUser(); };
+    showInFinderButton.onClick = [this]
+    {
+        if (outputFile.existsAsFile())
+            outputFile.revealToUser();
+        else if (outputDirectory.isDirectory())
+            outputDirectory.revealToUser();
+    };
 }
 
 void StatusComponent::resized()
@@ -42,7 +48,16 @@ void StatusComponent::setProgress (double value)
 void StatusComponent::setOutputFile (const juce::File& file)
 {
     outputFile = file;
+    outputDirectory = juce::File();
     showInFinderButton.setVisible (file.existsAsFile());
+    resized();
+}
+
+void StatusComponent::setOutputDirectory (const juce::File& dir)
+{
+    outputDirectory = dir;
+    outputFile = juce::File();
+    showInFinderButton.setVisible (dir.isDirectory());
     resized();
 }
 
@@ -50,5 +65,6 @@ void StatusComponent::reset()
 {
     setStatus ("Ready");
     setProgress (-1.0);
-    setOutputFile ({});
+    setOutputFile (juce::File());
+    outputDirectory = juce::File();
 }
