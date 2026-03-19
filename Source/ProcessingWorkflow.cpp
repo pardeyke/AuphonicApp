@@ -492,20 +492,24 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
 {
     setState (State::Saving);
 
-    auto now = juce::Time::getCurrentTime();
-    juce::String suffix = avoidOverwrite
-        ? (outputSuffix + "_" + now.formatted ("%Y%m%d_%H%M%S"))
-        : juce::String{};
+    juce::String suffix = avoidOverwrite ? outputSuffix : juce::String{};
+    auto dir = originalSourceFile.getParentDirectory();
+    auto baseName = originalSourceFile.getFileNameWithoutExtension() + suffix;
+    auto ext = tempFile.getFileExtension();
 
-    auto outputFile = originalSourceFile.getParentDirectory()
-        .getChildFile (originalSourceFile.getFileNameWithoutExtension() + suffix + tempFile.getFileExtension());
+    auto outputFile = dir.getChildFile (baseName + ext);
+
+    // If the file already exists (and it's not the original we intend to overwrite), add _2, _3, etc.
+    if (outputFile.existsAsFile() && (avoidOverwrite || outputFile != originalSourceFile))
+    {
+        int counter = 2;
+        while (dir.getChildFile (baseName + "_" + juce::String (counter) + ext).existsAsFile())
+            ++counter;
+        outputFile = dir.getChildFile (baseName + "_" + juce::String (counter) + ext);
+    }
 
     if (listener)
         listener->workflowProgressChanged (-1.0, "Saving " + outputFile.getFileName() + "...");
-
-    // Only delete an existing file when we're NOT using the suffix (i.e. overwrite mode)
-    if (suffix.isEmpty() && outputFile != originalSourceFile && outputFile.existsAsFile())
-        outputFile.deleteFile();
 
     bool success = tempFile.moveFileTo (outputFile);
     if (success)
@@ -517,7 +521,7 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
             auto root = std::make_unique<juce::DynamicObject>();
             root->setProperty ("input_file",  originalSourceFile.getFullPathName());
             root->setProperty ("output_file", outputFile.getFullPathName());
-            root->setProperty ("processed_at", now.formatted ("%Y-%m-%d %H:%M:%S"));
+            root->setProperty ("processed_at", juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H:%M:%S"));
 
             if (presetId.isNotEmpty())
             {
