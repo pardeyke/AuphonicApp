@@ -821,6 +821,7 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
 void ManualOptionsComponent::setFileChannelCount (int numChannels)
 {
     currentFileChannels = numChannels;
+    int previousId = channelCombo.getSelectedId();
     channelCombo.clear (juce::dontSendNotification);
 
     bool show = numChannels >= 2;
@@ -829,7 +830,6 @@ void ManualOptionsComponent::setFileChannelCount (int numChannels)
 
     if (show)
     {
-        int previousId = channelCombo.getSelectedId();
 
         channelCombo.addItem ("All Channels", 1);
         for (int ch = 1; ch <= numChannels; ++ch)
