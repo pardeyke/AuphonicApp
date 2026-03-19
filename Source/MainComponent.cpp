@@ -219,6 +219,7 @@ void MainComponent::onProcessClicked()
     saveCurrentConfig();
     workflow->start (file, presetUuid, manualSettings,
                      manualOptionsComponent.shouldAvoidOverwrite(),
+                     manualOptionsComponent.getOutputSuffix(),
                      manualOptionsComponent.shouldWriteSettingsXml(),
                      manualOptionsComponent.getSelectedChannel(),
                      previewDurationComponent.getPreviewDurationSeconds());

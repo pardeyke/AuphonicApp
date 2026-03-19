@@ -38,6 +38,7 @@ public:
                 const juce::String& presetUuid,
                 const juce::var& manualSettings,
                 bool avoidOverwrite,
+                const juce::String& outputSuffix,
                 bool writeSettingsXml,
                 int channelToExtract = 0,
                 double previewDuration = 0.0);
@@ -76,6 +77,7 @@ private:
     juce::var settings;
     juce::String targetExtension; // set when post-download format conversion is needed
     bool avoidOverwrite   = false;
+    juce::String outputSuffix;
     bool writeSettingsXml = false;
     bool cancelled = false;
     int extractChannel = 0;      // 0 = all channels, 1-N = specific channel

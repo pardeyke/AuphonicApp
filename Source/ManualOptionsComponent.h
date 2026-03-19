@@ -23,6 +23,7 @@ public:
     int getSelectedChannel() const;
 
     bool shouldAvoidOverwrite() const  { return avoidOverwriteToggle.getToggleState(); }
+    juce::String getOutputSuffix() const { return suffixEditor.getText(); }
     bool shouldWriteSettingsXml() const { return writeXmlToggle.getToggleState(); }
 
     std::function<void()> onChange;
@@ -112,6 +113,8 @@ private:
 
     // --- Output Behavior ---
     juce::ToggleButton avoidOverwriteToggle { "Create a new file (don't overwrite)" };
+    juce::Label suffixLabel { {}, "Suffix:" };
+    juce::TextEditor suffixEditor;
     juce::ToggleButton writeXmlToggle       { "Write settings JSON alongside output" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ManualOptionsComponent)

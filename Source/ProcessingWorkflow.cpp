@@ -15,6 +15,7 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
                                  const juce::String& presetUuid,
                                  const juce::var& manualSettings,
                                  bool avoidOverwriteFlag,
+                                 const juce::String& outputSuffixStr,
                                  bool writeSettingsXmlFlag,
                                  int channelToExtract,
                                  double previewDuration)
@@ -30,6 +31,7 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
     lastOutputFile = juce::File();
     targetExtension = {};
     avoidOverwrite   = avoidOverwriteFlag;
+    outputSuffix     = outputSuffixStr;
     writeSettingsXml = writeSettingsXmlFlag;
     extractChannel = channelToExtract;
     previewDurationSeconds = previewDuration;
@@ -492,7 +494,7 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
 
     auto now = juce::Time::getCurrentTime();
     juce::String suffix = avoidOverwrite
-        ? ("_auphonic_" + now.formatted ("%Y%m%d_%H%M%S"))
+        ? (outputSuffix + "_" + now.formatted ("%Y%m%d_%H%M%S"))
         : juce::String{};
 
     auto outputFile = originalSourceFile.getParentDirectory()

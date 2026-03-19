@@ -190,7 +190,12 @@ ManualOptionsComponent::ManualOptionsComponent()
 
     // ── Output Behavior ──
     addAndMakeVisible (avoidOverwriteToggle);
-    avoidOverwriteToggle.onClick = [this] { notifyChange(); };
+    avoidOverwriteToggle.onClick = [this] { updateDependentVisibility(); notifyChange(); };
+
+    addAndMakeVisible (suffixLabel);
+    addAndMakeVisible (suffixEditor);
+    suffixEditor.setText ("_auphonic", juce::dontSendNotification);
+    suffixEditor.onTextChange = [this] { notifyChange(); };
 
     addAndMakeVisible (writeXmlToggle);
     writeXmlToggle.onClick = [this] { notifyChange(); };
@@ -378,6 +383,11 @@ void ManualOptionsComponent::updateDependentVisibility()
     filterMethodLabel.setVisible (filterEnabled);
     filterMethodCombo.setVisible (filterEnabled);
 
+    // Suffix field (visible when "create new file" is on)
+    bool showSuffix = avoidOverwriteToggle.getToggleState();
+    suffixLabel.setVisible (showSuffix);
+    suffixEditor.setVisible (showSuffix);
+
     // Bitrate (lossy formats only: IDs 5–9, not Keep Format ID=10)
     int fmtId = outputFormatCombo.getSelectedId();
     bool showBitrate = (fmtId >= 5 && fmtId <= 9);
@@ -504,6 +514,16 @@ void ManualOptionsComponent::resized()
     area.removeFromTop (2);
     avoidOverwriteToggle.setBounds (area.removeFromTop (rowH));
     addGap();
+
+    if (suffixEditor.isVisible())
+    {
+        auto row = area.removeFromTop (rowH);
+        row.removeFromLeft (indent);
+        suffixLabel.setBounds (row.removeFromLeft (50));
+        suffixEditor.setBounds (row.removeFromLeft (150));
+        addGap();
+    }
+
     writeXmlToggle.setBounds (area.removeFromTop (rowH));
 }
 
@@ -560,7 +580,9 @@ int ManualOptionsComponent::getRequiredHeight() const
         h += gap + rowH;
 
     // Output behavior toggles (always visible)
-    h += gap + 2 + rowH + gap + rowH;
+    h += gap + 2 + rowH + gap; // avoidOverwrite toggle + gap
+    if (suffixEditor.isVisible()) h += rowH + gap;
+    h += rowH; // writeXml toggle
 
     return h;
 }
@@ -731,6 +753,7 @@ juce::var ManualOptionsComponent::getWidgetState() const
     // Note: outputFormat and outputBitrate are intentionally NOT saved.
     // "Keep Format" is always the default.
     state->setProperty ("avoidOverwrite",  avoidOverwriteToggle.getToggleState());
+    state->setProperty ("outputSuffix",    suffixEditor.getText());
     state->setProperty ("writeXml",        writeXmlToggle.getToggleState());
     state->setProperty ("selectedChannel", channelCombo.getSelectedId());
 
@@ -784,6 +807,10 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
     outputFormatCombo.setSelectedId (10, juce::dontSendNotification);
     populateBitrateCombo();
     setToggle (avoidOverwriteToggle, "avoidOverwrite", false);
+    {
+        auto suffix = state.getProperty ("outputSuffix", "_auphonic").toString();
+        suffixEditor.setText (suffix, juce::dontSendNotification);
+    }
     setToggle (writeXmlToggle, "writeXml", false);
     setCombo (channelCombo, "selectedChannel", 1);
 
