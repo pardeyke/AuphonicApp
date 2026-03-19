@@ -611,6 +611,12 @@ juce::var ManualOptionsComponent::getSettings() const
                 algorithms->setProperty ("musicgain", musicGainComboToApiValue (musicGainCombo));
         }
     }
+    else
+    {
+        algorithms->setProperty ("leveler", false);
+        algorithms->setProperty ("levelerstrength", 0);
+        algorithms->setProperty ("compressor", "off");
+    }
 
     if (noiseToggle.getToggleState())
     {
@@ -630,6 +636,13 @@ juce::var ManualOptionsComponent::getSettings() const
         if (methodId == 2 || methodId == 3)
             algorithms->setProperty ("debreathamount", dbComboToApiValue (breathAmountCombo));
     }
+    else
+    {
+        algorithms->setProperty ("denoise", false);
+        algorithms->setProperty ("denoiseamount", -1);
+        algorithms->setProperty ("debreathamount", -1);
+        algorithms->setProperty ("dehumamount", -1);
+    }
 
     if (filterToggle.getToggleState())
     {
@@ -640,6 +653,10 @@ juce::var ManualOptionsComponent::getSettings() const
         else if (fmId == 2) algorithms->setProperty ("filtermethod", "autoeq");
         else if (fmId == 3) algorithms->setProperty ("filtermethod", "bwe");
     }
+    else
+    {
+        algorithms->setProperty ("filtering", false);
+    }
 
     if (loudnessToggle.getToggleState())
     {
@@ -649,6 +666,10 @@ juce::var ManualOptionsComponent::getSettings() const
         else if (target == 2) algorithms->setProperty ("loudnesstarget", -23.0);
         else if (target == 3) algorithms->setProperty ("loudnesstarget", -24.0);
         else if (target == 4) algorithms->setProperty ("loudnesstarget", -14.0);
+    }
+    else
+    {
+        algorithms->setProperty ("normloudness", false);
     }
 
     settings->setProperty ("algorithms", juce::var (algorithms.release()));
