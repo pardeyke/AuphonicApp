@@ -371,23 +371,13 @@ void MainComponent::workflowProgressChanged (double progress, const juce::String
 
 void MainComponent::workflowCompleted()
 {
-    statusComponent.setStatus ("Complete! File saved.");
-    statusComponent.setProgress (1.0);
+    auto outputFile = workflow->getLastOutputFile();
+    statusComponent.setStatus ("Complete! Saved to: " + outputFile.getFileName());
+    statusComponent.setProgress (-1.0);
+    statusComponent.setOutputFile (outputFile);
     refreshCredits();
 
-    auto outputFile = workflow->getLastOutputFile();
     audioPlayerComponent.loadProcessedFile (outputFile);
-
-    auto* aw = new juce::AlertWindow ("Success",
-        "Processing complete. Output saved to:\n" + outputFile.getFullPathName(),
-        juce::MessageBoxIconType::InfoIcon);
-    aw->addButton ("OK", 0);
-    aw->addButton ("Show in Finder", 1);
-    aw->enterModalState (true, juce::ModalCallbackFunction::create ([outputFile] (int result)
-    {
-        if (result == 1)
-            outputFile.revealToUser();
-    }), true);
 }
 
 void MainComponent::workflowFailed (const juce::String& errorMessage)

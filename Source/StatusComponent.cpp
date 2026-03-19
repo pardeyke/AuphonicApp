@@ -6,12 +6,23 @@ StatusComponent::StatusComponent()
     addAndMakeVisible (statusLabel);
     addAndMakeVisible (progressBar);
     progressBar.setVisible (false);
+
+    addChildComponent (showInFinderButton);
+    showInFinderButton.onClick = [this] { outputFile.revealToUser(); };
 }
 
 void StatusComponent::resized()
 {
     auto area = getLocalBounds();
-    statusLabel.setBounds (area.removeFromTop (22));
+    auto statusRow = area.removeFromTop (22);
+
+    if (showInFinderButton.isVisible())
+    {
+        showInFinderButton.setBounds (statusRow.removeFromRight (110));
+        statusRow.removeFromRight (4);
+    }
+
+    statusLabel.setBounds (statusRow);
     area.removeFromTop (4);
     progressBar.setBounds (area.removeFromTop (20));
 }
@@ -28,8 +39,16 @@ void StatusComponent::setProgress (double value)
     repaint();
 }
 
+void StatusComponent::setOutputFile (const juce::File& file)
+{
+    outputFile = file;
+    showInFinderButton.setVisible (file.existsAsFile());
+    resized();
+}
+
 void StatusComponent::reset()
 {
     setStatus ("Ready");
     setProgress (-1.0);
+    setOutputFile ({});
 }
