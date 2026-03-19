@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 #include "SettingsComponent.h"
+#include "DesktopNotification.h"
 
 MainComponent::MainComponent (const juce::File& initialFile)
 {
@@ -378,6 +379,9 @@ void MainComponent::workflowCompleted()
     refreshCredits();
 
     audioPlayerComponent.loadProcessedFile (outputFile);
+
+    DesktopNotification::show ("Processing Complete",
+        "Saved to: " + outputFile.getFileName());
 }
 
 void MainComponent::workflowFailed (const juce::String& errorMessage)

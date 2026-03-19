@@ -39,6 +39,7 @@ target_sources(AuphonicApp PRIVATE
     Source/MacStyleLookAndFeel.cpp
     Source/AudioPlayerComponent.cpp
     Source/PreviewDurationComponent.cpp
+    Source/DesktopNotification.mm
 )
 
 target_compile_definitions(AuphonicApp PRIVATE
@@ -59,4 +60,5 @@ target_link_libraries(AuphonicApp PRIVATE
     juce::juce_audio_utils
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags
+    "-framework UserNotifications"
 )
