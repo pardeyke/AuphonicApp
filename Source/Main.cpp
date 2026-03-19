@@ -15,21 +15,7 @@ public:
         lookAndFeel = std::make_unique<MacStyleLookAndFeel>();
         juce::LookAndFeel::setDefaultLookAndFeel (lookAndFeel.get());
 
-        juce::File initialFile;
-
-        auto args = juce::StringArray::fromTokens (commandLine, true);
-        for (auto& arg : args)
-        {
-            arg = arg.unquoted();
-            juce::File f (arg);
-            if (f.existsAsFile())
-            {
-                initialFile = f;
-                break;
-            }
-        }
-
-        mainWindow = std::make_unique<MainWindow> (getApplicationName(), initialFile);
+        mainWindow = std::make_unique<MainWindow> (getApplicationName(), parseFileFromArgs (commandLine));
     }
 
     void shutdown() override
@@ -46,18 +32,23 @@ public:
 
     void anotherInstanceStarted (const juce::String& commandLine) override
     {
+        auto file = parseFileFromArgs (commandLine);
+        if (file.existsAsFile())
+            if (auto* mc = dynamic_cast<MainComponent*> (mainWindow->getContentComponent()))
+                mc->setFile (file);
+    }
+
+    static juce::File parseFileFromArgs (const juce::String& commandLine)
+    {
         auto args = juce::StringArray::fromTokens (commandLine, true);
         for (auto& arg : args)
         {
             arg = arg.unquoted();
             juce::File f (arg);
             if (f.existsAsFile())
-            {
-                if (auto* mc = dynamic_cast<MainComponent*> (mainWindow->getContentComponent()))
-                    mc->setFile (f);
-                break;
-            }
+                return f;
         }
+        return {};
     }
 
     class MainWindow : public juce::DocumentWindow

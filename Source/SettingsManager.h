@@ -21,6 +21,9 @@ public:
     void setAudioOutputDevice (const juce::String& deviceName);
 
 private:
+    juce::String getValue (const juce::String& key, const juce::String& defaultValue = {}) const;
+    void setValue (const juce::String& key, const juce::String& value);
+
     std::unique_ptr<juce::ApplicationProperties> appProperties;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SettingsManager)

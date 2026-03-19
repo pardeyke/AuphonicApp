@@ -73,17 +73,8 @@ void ProcessingWorkflow::cancel()
     cancelled = true;
     stopTimer();
 
-    if (extractedTempFile.existsAsFile())
-    {
-        extractedTempFile.deleteFile();
-        extractedTempFile = juce::File();
-    }
-
-    if (trimmedTempFile.existsAsFile())
-    {
-        trimmedTempFile.deleteFile();
-        trimmedTempFile = juce::File();
-    }
+    cleanupTempFile (extractedTempFile);
+    cleanupTempFile (trimmedTempFile);
 
     setState (State::Idle);
 }
@@ -101,6 +92,15 @@ void ProcessingWorkflow::setError (const juce::String& message)
     setState (State::Error);
     if (listener)
         listener->workflowFailed (message);
+}
+
+void ProcessingWorkflow::cleanupTempFile (juce::File& tempFile)
+{
+    if (tempFile.existsAsFile())
+    {
+        tempFile.deleteFile();
+        tempFile = juce::File();
+    }
 }
 
 void ProcessingWorkflow::stepExtractChannel()
@@ -340,16 +340,8 @@ void ProcessingWorkflow::stepUpload()
             if (! success) { setError ("Upload failed: " + error); return; }
 
             // Clean up temp files after successful upload
-            if (extractedTempFile.existsAsFile())
-            {
-                extractedTempFile.deleteFile();
-                extractedTempFile = juce::File();
-            }
-            if (trimmedTempFile.existsAsFile())
-            {
-                trimmedTempFile.deleteFile();
-                trimmedTempFile = juce::File();
-            }
+            cleanupTempFile (extractedTempFile);
+            cleanupTempFile (trimmedTempFile);
 
             stepStart();
         });

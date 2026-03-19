@@ -52,6 +52,7 @@ private:
 
     void setState (State newState);
     void setError (const juce::String& message);
+    void cleanupTempFile (juce::File& tempFile);
 
     void stepExtractChannel();
     void stepTrimPreview();

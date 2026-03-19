@@ -393,158 +393,96 @@ void ManualOptionsComponent::resized()
 {
     auto area = getLocalBounds();
 
-    auto toggleWidth = [] (const juce::ToggleButton& t) { return 36 + 8 + (int) juce::Font (juce::FontOptions (13.0f)).getStringWidthFloat (t.getButtonText()) + 4; };
+    auto toggleWidth = [] (const juce::ToggleButton& t) {
+        return 36 + 8 + (int) juce::Font (juce::FontOptions (13.0f)).getStringWidthFloat (t.getButtonText()) + 4;
+    };
+
+    auto addGap = [&] { area.removeFromTop (gap); };
+
+    // Layout a toggle button row with optional indent
+    auto layoutToggle = [&] (juce::ToggleButton& toggle, int indentMul = 0) {
+        auto row = area.removeFromTop (rowH);
+        row.removeFromLeft (indent * indentMul);
+        toggle.setBounds (row.removeFromLeft (toggleWidth (toggle)));
+        addGap();
+    };
+
+    // Layout a label + combo row with optional indent
+    auto layoutLabelCombo = [&] (int indentMul, juce::Label& lbl, int lblW, juce::ComboBox& cmb, int cmbW) {
+        auto row = area.removeFromTop (rowH);
+        row.removeFromLeft (indent * indentMul);
+        lbl.setBounds (row.removeFromLeft (lblW));
+        cmb.setBounds (row.removeFromLeft (cmbW));
+        addGap();
+    };
+
+    // Layout two label + combo pairs on one row
+    auto layoutDualCombo = [&] (int indentMul,
+                                 juce::Label& lbl1, int lbl1W, juce::ComboBox& cmb1, int cmb1W,
+                                 juce::Label& lbl2, int lbl2W, juce::ComboBox& cmb2, int cmb2W) {
+        auto row = area.removeFromTop (rowH);
+        row.removeFromLeft (indent * indentMul);
+        lbl1.setBounds (row.removeFromLeft (lbl1W));
+        cmb1.setBounds (row.removeFromLeft (cmb1W));
+        row.removeFromLeft (8);
+        lbl2.setBounds (row.removeFromLeft (lbl2W));
+        cmb2.setBounds (row.removeFromLeft (cmb2W));
+        addGap();
+    };
 
     // ── Channel Selector ──
     if (channelCombo.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        channelLabel.setBounds (row.removeFromLeft (70));
-        channelCombo.setBounds (row.removeFromLeft (180));
-        area.removeFromTop (gap);
-    }
+        layoutLabelCombo (0, channelLabel, 70, channelCombo, 180);
 
     // ── Leveler ──
-    { auto row = area.removeFromTop (rowH); levelerToggle.setBounds (row.removeFromLeft (toggleWidth (levelerToggle))); }
-    area.removeFromTop (gap);
+    layoutToggle (levelerToggle);
 
     if (strengthCombo.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        strengthLabel.setBounds (row.removeFromLeft (70));
-        strengthCombo.setBounds (row.removeFromLeft (80));
-        row.removeFromLeft (8);
-        compressorLabel.setBounds (row.removeFromLeft (80));
-        compressorCombo.setBounds (row.removeFromLeft (90));
-        area.removeFromTop (gap);
-    }
+        layoutDualCombo (1, strengthLabel, 70, strengthCombo, 80,
+                            compressorLabel, 80, compressorCombo, 90);
 
     if (separateMsToggle.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        separateMsToggle.setBounds (row.removeFromLeft (toggleWidth (separateMsToggle)));
-        area.removeFromTop (gap);
-    }
+        layoutToggle (separateMsToggle, 1);
 
     if (classifierCombo.isVisible())
     {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent * 2);
-        classifierLabel.setBounds (row.removeFromLeft (70));
-        classifierCombo.setBounds (row.removeFromLeft (90));
-        area.removeFromTop (gap);
-
-        row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent * 2);
-        speechStrengthLabel.setBounds (row.removeFromLeft (110));
-        speechStrengthCombo.setBounds (row.removeFromLeft (80));
-        row.removeFromLeft (8);
-        speechCompressorLabel.setBounds (row.removeFromLeft (80));
-        speechCompressorCombo.setBounds (row.removeFromLeft (90));
-        area.removeFromTop (gap);
-
-        row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent * 2);
-        musicStrengthLabel.setBounds (row.removeFromLeft (110));
-        musicStrengthCombo.setBounds (row.removeFromLeft (80));
-        row.removeFromLeft (8);
-        musicCompressorLabel.setBounds (row.removeFromLeft (80));
-        musicCompressorCombo.setBounds (row.removeFromLeft (90));
-        area.removeFromTop (gap);
+        layoutLabelCombo (2, classifierLabel, 70, classifierCombo, 90);
+        layoutDualCombo (2, speechStrengthLabel, 110, speechStrengthCombo, 80,
+                            speechCompressorLabel, 80, speechCompressorCombo, 90);
+        layoutDualCombo (2, musicStrengthLabel, 110, musicStrengthCombo, 80,
+                            musicCompressorLabel, 80, musicCompressorCombo, 90);
     }
 
     if (musicGainCombo.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent * 2);
-        musicGainLabel.setBounds (row.removeFromLeft (80));
-        musicGainCombo.setBounds (row.removeFromLeft (90));
-        area.removeFromTop (gap);
-    }
+        layoutLabelCombo (2, musicGainLabel, 80, musicGainCombo, 90);
 
     if (broadcastToggle.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        broadcastToggle.setBounds (row.removeFromLeft (toggleWidth (broadcastToggle)));
-        area.removeFromTop (gap);
-    }
+        layoutToggle (broadcastToggle, 1);
 
     if (maxLraCombo.isVisible())
     {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent * 2);
-        maxLraLabel.setBounds (row.removeFromLeft (80));
-        maxLraCombo.setBounds (row.removeFromLeft (80));
-        area.removeFromTop (gap);
-
-        row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent * 2);
-        maxSLabel.setBounds (row.removeFromLeft (110));
-        maxSCombo.setBounds (row.removeFromLeft (80));
-        area.removeFromTop (gap);
-
-        row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent * 2);
-        maxMLabel.setBounds (row.removeFromLeft (110));
-        maxMCombo.setBounds (row.removeFromLeft (80));
-        area.removeFromTop (gap);
+        layoutLabelCombo (2, maxLraLabel, 80, maxLraCombo, 80);
+        layoutLabelCombo (2, maxSLabel, 110, maxSCombo, 80);
+        layoutLabelCombo (2, maxMLabel, 110, maxMCombo, 80);
     }
 
     // ── Noise Reduction ──
-    { auto row = area.removeFromTop (rowH); noiseToggle.setBounds (row.removeFromLeft (toggleWidth (noiseToggle))); }
-    area.removeFromTop (gap);
+    layoutToggle (noiseToggle);
 
     if (methodCombo.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        methodLabel.setBounds (row.removeFromLeft (60));
-        methodCombo.setBounds (row.removeFromLeft (200));
-        area.removeFromTop (gap);
-    }
-
+        layoutLabelCombo (1, methodLabel, 60, methodCombo, 200);
     if (noiseAmountCombo.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        noiseAmountLabel.setBounds (row.removeFromLeft (100));
-        noiseAmountCombo.setBounds (row.removeFromLeft (140));
-        area.removeFromTop (gap);
-    }
-
+        layoutLabelCombo (1, noiseAmountLabel, 100, noiseAmountCombo, 140);
     if (reverbAmountCombo.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        reverbAmountLabel.setBounds (row.removeFromLeft (100));
-        reverbAmountCombo.setBounds (row.removeFromLeft (140));
-        area.removeFromTop (gap);
-    }
-
+        layoutLabelCombo (1, reverbAmountLabel, 100, reverbAmountCombo, 140);
     if (breathAmountCombo.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        breathAmountLabel.setBounds (row.removeFromLeft (100));
-        breathAmountCombo.setBounds (row.removeFromLeft (140));
-        area.removeFromTop (gap);
-    }
+        layoutLabelCombo (1, breathAmountLabel, 100, breathAmountCombo, 140);
 
     // ── Filtering ──
-    { auto row = area.removeFromTop (rowH); filterToggle.setBounds (row.removeFromLeft (toggleWidth (filterToggle))); }
-    area.removeFromTop (gap);
+    layoutToggle (filterToggle);
 
     if (filterMethodCombo.isVisible())
-    {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        filterMethodLabel.setBounds (row.removeFromLeft (60));
-        filterMethodCombo.setBounds (row.removeFromLeft (180));
-        area.removeFromTop (gap);
-    }
+        layoutLabelCombo (1, filterMethodLabel, 60, filterMethodCombo, 180);
 
     // ── Loudness ──
     {
@@ -556,25 +494,16 @@ void ManualOptionsComponent::resized()
     }
 
     // ── Output Format ──
-    area.removeFromTop (gap);
-    {
-        auto row = area.removeFromTop (rowH);
-        outputFormatLabel.setBounds (row.removeFromLeft (100));
-        outputFormatCombo.setBounds (row.removeFromLeft (120));
-    }
+    addGap();
+    layoutLabelCombo (0, outputFormatLabel, 100, outputFormatCombo, 120);
 
     if (bitrateCombo.isVisible())
-    {
-        area.removeFromTop (gap);
-        auto row = area.removeFromTop (rowH);
-        bitrateLabel.setBounds (row.removeFromLeft (100));
-        bitrateCombo.setBounds (row.removeFromLeft (120));
-    }
+        layoutLabelCombo (0, bitrateLabel, 100, bitrateCombo, 120);
 
     // ── Output Behavior ──
-    area.removeFromTop (gap + 2);
+    area.removeFromTop (2);
     avoidOverwriteToggle.setBounds (area.removeFromTop (rowH));
-    area.removeFromTop (gap);
+    addGap();
     writeXmlToggle.setBounds (area.removeFromTop (rowH));
 }
 

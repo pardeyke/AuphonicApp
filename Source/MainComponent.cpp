@@ -86,32 +86,7 @@ MainComponent::MainComponent (const juce::File& initialFile)
     // Restore manual settings before presets load (presets restore happens in refreshPresets callback)
     restoreLastConfig();
 
-    if (settingsManager.hasApiToken())
-    {
-        statusComponent.setStatus ("Connecting...");
-        apiClient->fetchUserInfo ([this] (bool success, int httpStatus, const UserCredits& credits)
-        {
-            if (success)
-            {
-                creditsComponent.setCredits (credits);
-                statusComponent.setStatus ("Ready.");
-                refreshPresets();
-            }
-            else if (httpStatus == 401 || httpStatus == 403)
-            {
-                statusComponent.setStatus ("Invalid API token. Please check Settings.");
-            }
-            else
-            {
-                statusComponent.setStatus ("Connection failed. Check your internet.");
-            }
-        });
-    }
-    else
-    {
-        statusComponent.setStatus ("No API token. Please configure in Settings.");
-    }
-
+    connectAndFetchUser();
     audioPlayerComponent.setOutputDevice (settingsManager.getAudioOutputDevice());
 
     updateButtonStates();
@@ -204,32 +179,7 @@ void MainComponent::onSettingsClicked()
     {
         apiClient->setToken (settingsManager.getApiToken());
         audioPlayerComponent.setOutputDevice (settingsManager.getAudioOutputDevice());
-
-        if (settingsManager.hasApiToken())
-        {
-            statusComponent.setStatus ("Connecting...");
-            apiClient->fetchUserInfo ([this] (bool success, int httpStatus, const UserCredits& credits)
-            {
-                if (success)
-                {
-                    creditsComponent.setCredits (credits);
-                    statusComponent.setStatus ("Ready.");
-                    refreshPresets();
-                }
-                else if (httpStatus == 401 || httpStatus == 403)
-                {
-                    statusComponent.setStatus ("Invalid API token. Please check Settings.");
-                }
-                else
-                {
-                    statusComponent.setStatus ("Connection failed. Check your internet.");
-                }
-            });
-        }
-        else
-        {
-            statusComponent.setStatus ("No API token. Please configure in Settings.");
-        }
+        connectAndFetchUser();
     });
 }
 
@@ -288,6 +238,35 @@ void MainComponent::refreshCredits()
         if (success)
             creditsComponent.setCredits (credits);
     });
+}
+
+void MainComponent::connectAndFetchUser()
+{
+    if (settingsManager.hasApiToken())
+    {
+        statusComponent.setStatus ("Connecting...");
+        apiClient->fetchUserInfo ([this] (bool success, int httpStatus, const UserCredits& credits)
+        {
+            if (success)
+            {
+                creditsComponent.setCredits (credits);
+                statusComponent.setStatus ("Ready.");
+                refreshPresets();
+            }
+            else if (httpStatus == 401 || httpStatus == 403)
+            {
+                statusComponent.setStatus ("Invalid API token. Please check Settings.");
+            }
+            else
+            {
+                statusComponent.setStatus ("Connection failed. Check your internet.");
+            }
+        });
+    }
+    else
+    {
+        statusComponent.setStatus ("No API token. Please configure in Settings.");
+    }
 }
 
 void MainComponent::refreshPresets()

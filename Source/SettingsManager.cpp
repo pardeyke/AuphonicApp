@@ -12,71 +12,31 @@ SettingsManager::SettingsManager()
     appProperties->setStorageParameters (options);
 }
 
-juce::String SettingsManager::getApiToken() const
+juce::String SettingsManager::getValue (const juce::String& key, const juce::String& defaultValue) const
 {
     if (auto* props = appProperties->getUserSettings())
-        return props->getValue ("apiToken", "");
-    return {};
+        return props->getValue (key, defaultValue);
+    return defaultValue;
 }
 
-void SettingsManager::setApiToken (const juce::String& token)
+void SettingsManager::setValue (const juce::String& key, const juce::String& value)
 {
     if (auto* props = appProperties->getUserSettings())
     {
-        props->setValue ("apiToken", token);
+        props->setValue (key, value);
         props->saveIfNeeded();
     }
 }
 
-bool SettingsManager::hasApiToken() const
-{
-    return getApiToken().isNotEmpty();
-}
+juce::String SettingsManager::getApiToken() const              { return getValue ("apiToken"); }
+void SettingsManager::setApiToken (const juce::String& token)  { setValue ("apiToken", token); }
+bool SettingsManager::hasApiToken() const                      { return getApiToken().isNotEmpty(); }
 
-juce::String SettingsManager::getLastPresetUuid() const
-{
-    if (auto* props = appProperties->getUserSettings())
-        return props->getValue ("lastPresetUuid", "");
-    return {};
-}
+juce::String SettingsManager::getLastPresetUuid() const              { return getValue ("lastPresetUuid"); }
+void SettingsManager::setLastPresetUuid (const juce::String& uuid)   { setValue ("lastPresetUuid", uuid); }
 
-void SettingsManager::setLastPresetUuid (const juce::String& uuid)
-{
-    if (auto* props = appProperties->getUserSettings())
-    {
-        props->setValue ("lastPresetUuid", uuid);
-        props->saveIfNeeded();
-    }
-}
+juce::String SettingsManager::getLastManualSettings() const                    { return getValue ("lastManualSettings"); }
+void SettingsManager::setLastManualSettings (const juce::String& jsonString)   { setValue ("lastManualSettings", jsonString); }
 
-juce::String SettingsManager::getLastManualSettings() const
-{
-    if (auto* props = appProperties->getUserSettings())
-        return props->getValue ("lastManualSettings", "");
-    return {};
-}
-
-void SettingsManager::setLastManualSettings (const juce::String& jsonString)
-{
-    if (auto* props = appProperties->getUserSettings())
-    {
-        props->setValue ("lastManualSettings", jsonString);
-        props->saveIfNeeded();
-    }
-}
-
-juce::String SettingsManager::getAudioOutputDevice() const
-{
-    if (auto* props = appProperties->getUserSettings())
-        return props->getValue ("audioOutputDevice", "");
-    return {};
-}
-
-void SettingsManager::setAudioOutputDevice (const juce::String& deviceName)
-{
-    if (auto* props = appProperties->getUserSettings())
-    {
-        props->setValue ("audioOutputDevice", deviceName);
-        props->saveIfNeeded();
-    }
-}
+juce::String SettingsManager::getAudioOutputDevice() const                     { return getValue ("audioOutputDevice"); }
+void SettingsManager::setAudioOutputDevice (const juce::String& deviceName)    { setValue ("audioOutputDevice", deviceName); }

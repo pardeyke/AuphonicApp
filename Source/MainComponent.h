@@ -37,6 +37,7 @@ private:
     void onProcessClicked();
     void onCancelClicked();
     void onSavePresetClicked();
+    void connectAndFetchUser();
     void refreshPresets();
     void refreshCredits();
     void updateButtonStates();
