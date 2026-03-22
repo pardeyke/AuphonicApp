@@ -91,30 +91,31 @@ juce::StringArray readIxmlTrackNames (const juce::File& wavFile)
     if (trackList == nullptr)
         return {};
 
-    // Find the maximum channel index to size the array
-    int maxChannel = 0;
+    // Use INTERLEAVE_INDEX (physical position in the WAV file) to map track names,
+    // since CHANNEL_INDEX can be non-contiguous (e.g. mixer channels 1, 2, 4)
+    int maxInterleave = 0;
     for (auto* track = trackList->getChildByName ("TRACK"); track != nullptr;
          track = track->getNextElementWithTagName ("TRACK"))
     {
-        int idx = track->getChildElementAllSubText ("CHANNEL_INDEX", "0").getIntValue();
-        if (idx > maxChannel)
-            maxChannel = idx;
+        int idx = track->getChildElementAllSubText ("INTERLEAVE_INDEX", "0").getIntValue();
+        if (idx > maxInterleave)
+            maxInterleave = idx;
     }
 
-    if (maxChannel == 0)
+    if (maxInterleave == 0)
         return {};
 
-    // Index 0 unused, indices 1..maxChannel hold track names
+    // Index 0 unused, indices 1..maxInterleave hold track names
     juce::StringArray names;
-    for (int i = 0; i <= maxChannel; ++i)
+    for (int i = 0; i <= maxInterleave; ++i)
         names.add ({});
 
     for (auto* track = trackList->getChildByName ("TRACK"); track != nullptr;
          track = track->getNextElementWithTagName ("TRACK"))
     {
-        int idx = track->getChildElementAllSubText ("CHANNEL_INDEX", "0").getIntValue();
+        int idx = track->getChildElementAllSubText ("INTERLEAVE_INDEX", "0").getIntValue();
         auto name = track->getChildElementAllSubText ("NAME", "").trim();
-        if (idx >= 1 && idx <= maxChannel)
+        if (idx >= 1 && idx <= maxInterleave)
             names.set (idx, name);
     }
 
