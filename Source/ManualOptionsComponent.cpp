@@ -838,7 +838,18 @@ void ManualOptionsComponent::setFileChannelCount (int numChannels, const juce::S
 
     if (show)
     {
-        channelCombo.addItem ("All Channels", 1);
+        if (numChannels <= 2)
+        {
+            // id 1 = All Channels (stereo passthrough for 2ch)
+            channelCombo.addItem ("All Channels", 1);
+        }
+        else
+        {
+            // For 3+ channel files, show L+R instead of All Channels
+            // id = numChannels + 2 (safely above all per-channel ids)
+            channelCombo.addItem ("L+R Channels", numChannels + 2);
+        }
+
         for (int ch = 1; ch <= numChannels; ++ch)
         {
             juce::String name = "Channel " + juce::String (ch);
@@ -852,11 +863,19 @@ void ManualOptionsComponent::setFileChannelCount (int numChannels, const juce::S
             channelCombo.addItem (name, ch + 1); // id 2 = ch 1, id 3 = ch 2, etc.
         }
 
-        // Preserve previous channel selection if still valid, otherwise default to All Channels
-        if (previousId >= 1 && previousId <= numChannels + 1)
+        if (numChannels >= 3)
+        {
+            // Default to L+R for 3+ channel files since Auphonic only processes stereo
+            channelCombo.setSelectedId (numChannels + 2, juce::dontSendNotification);
+        }
+        else if (numChannels <= 2 && previousId >= 1 && previousId <= numChannels + 1)
+        {
             channelCombo.setSelectedId (previousId, juce::dontSendNotification);
+        }
         else
+        {
             channelCombo.setSelectedId (1, juce::dontSendNotification);
+        }
     }
 
     setSize (getWidth(), getRequiredHeight());
@@ -868,7 +887,9 @@ int ManualOptionsComponent::getSelectedChannel() const
     if (! channelCombo.isVisible())
         return 0;
     int id = channelCombo.getSelectedId();
-    return (id <= 1) ? 0 : (id - 1); // id 1 = All (0), id 2 = ch 1, id 3 = ch 2, etc.
+    if (id == 1) return 0;                              // All Channels
+    if (id == currentFileChannels + 2) return -1;       // L+R Channels (stereo extract)
+    return (id - 1);                                    // id 2 = ch 1, id 3 = ch 2, etc.
 }
 
 void ManualOptionsComponent::notifyChange()

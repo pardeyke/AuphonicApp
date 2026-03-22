@@ -59,6 +59,7 @@ private:
     juce::Viewport optionsViewport;
     StatusComponent statusComponent;
 
+    juce::Label channelWarningLabel;
     juce::TextButton processButton { "Process" };
     juce::TextButton cancelButton { "Cancel" };
 

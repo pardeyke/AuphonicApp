@@ -65,7 +65,7 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
             obj->setProperty ("output_format", apiFormat);
     }
 
-    if (extractChannel > 0)
+    if (extractChannel != 0)
         stepExtractChannel();
     else if (previewDurationSeconds > 0.0)
         stepTrimPreview();
@@ -111,12 +111,22 @@ void ProcessingWorkflow::cleanupTempFile (juce::File& tempFile)
 void ProcessingWorkflow::stepExtractChannel()
 {
     setState (State::ExtractingChannel);
-    if (listener)
-        listener->workflowProgressChanged (-1.0, "Extracting channel " + juce::String (extractChannel) + "...");
 
-    int channel = extractChannel;
+    bool stereoExtract = (extractChannel == -1);
+    int channel = extractChannel; // -1 = L+R stereo, >0 = single channel
 
-    juce::Thread::launch ([this, channel]
+    if (stereoExtract)
+    {
+        if (listener)
+            listener->workflowProgressChanged (-1.0, "Extracting L+R channels...");
+    }
+    else
+    {
+        if (listener)
+            listener->workflowProgressChanged (-1.0, "Extracting channel " + juce::String (channel) + "...");
+    }
+
+    juce::Thread::launch ([this, channel, stereoExtract]
     {
         juce::AudioFormatManager mgr;
         mgr.registerBasicFormats();
@@ -128,9 +138,15 @@ void ProcessingWorkflow::stepExtractChannel()
         {
             std::unique_ptr<juce::AudioFormatReader> readerOwner (reader);
 
-            if (channel < 1 || channel > (int) reader->numChannels)
+            int outChannels = stereoExtract ? 2 : 1;
+
+            if (! stereoExtract && (channel < 1 || channel > (int) reader->numChannels))
             {
                 error = "Channel " + juce::String (channel) + " does not exist in this file";
+            }
+            else if (stereoExtract && reader->numChannels < 2)
+            {
+                error = "File has fewer than 2 channels for L+R extraction";
             }
             else
             {
@@ -145,7 +161,7 @@ void ProcessingWorkflow::stepExtractChannel()
                     if (auto* writer = wavFormat.createWriterFor (
                             os.get(),
                             reader->sampleRate,
-                            1, // mono output
+                            (unsigned int) outChannels,
                             static_cast<int> (reader->bitsPerSample),
                             reader->metadataValues,
                             0))
@@ -155,10 +171,9 @@ void ProcessingWorkflow::stepExtractChannel()
 
                         const int blockSize = 65536;
                         juce::AudioBuffer<float> buffer (static_cast<int> (reader->numChannels), blockSize);
-                        juce::AudioBuffer<float> monoBuffer (1, blockSize);
+                        juce::AudioBuffer<float> outBuffer (outChannels, blockSize);
                         juce::int64 samplesRemaining = reader->lengthInSamples;
                         juce::int64 startSample = 0;
-                        int srcChannel = channel - 1; // 0-indexed
 
                         success = true;
                         while (samplesRemaining > 0)
@@ -171,9 +186,17 @@ void ProcessingWorkflow::stepExtractChannel()
                                 break;
                             }
 
-                            monoBuffer.copyFrom (0, 0, buffer, srcChannel, 0, samplesToRead);
+                            if (stereoExtract)
+                            {
+                                outBuffer.copyFrom (0, 0, buffer, 0, 0, samplesToRead);
+                                outBuffer.copyFrom (1, 0, buffer, 1, 0, samplesToRead);
+                            }
+                            else
+                            {
+                                outBuffer.copyFrom (0, 0, buffer, channel - 1, 0, samplesToRead);
+                            }
 
-                            if (! writer->writeFromAudioSampleBuffer (monoBuffer, 0, samplesToRead))
+                            if (! writer->writeFromAudioSampleBuffer (outBuffer, 0, samplesToRead))
                             {
                                 success = false;
                                 error = "Failed to write extracted channel";
@@ -190,7 +213,7 @@ void ProcessingWorkflow::stepExtractChannel()
                             {
                                 if (cancelled) return;
                                 extractedTempFile = tempFile;
-                                sourceFile = tempFile; // upload the extracted mono file
+                                sourceFile = tempFile;
 
                                 if (previewDurationSeconds > 0.0)
                                     stepTrimPreview();

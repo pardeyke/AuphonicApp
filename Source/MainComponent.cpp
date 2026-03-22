@@ -27,6 +27,12 @@ MainComponent::MainComponent (const juce::File& initialFile)
 
     cancelButton.setEnabled (false);
 
+    addChildComponent (channelWarningLabel);
+    channelWarningLabel.setColour (juce::Label::textColourId, juce::Colours::red);
+    channelWarningLabel.setFont (juce::FontOptions (12.0f));
+    channelWarningLabel.setJustificationType (juce::Justification::topLeft);
+    channelWarningLabel.setMinimumHorizontalScale (1.0f); // don't squish text
+
     fileListComponent.onFilesChanged = [this]
     {
         auto files = fileListComponent.getFiles();
@@ -41,7 +47,19 @@ MainComponent::MainComponent (const juce::File& initialFile)
             previewDurationComponent.setFileDuration (creditsComponent.getFileDurationSeconds());
             creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
             auto trackNames = WavChunkCopier::readIxmlTrackNames (files[0]);
-            manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels(), trackNames);
+            int numCh = creditsComponent.getFileChannels();
+            manualOptionsComponent.setFileChannelCount (numCh, trackNames);
+
+            if (numCh >= 3)
+            {
+                channelWarningLabel.setText ("Note: File has " + juce::String (numCh)
+                    + " channels. Auphonic processes max 2 channels \u2014 defaulting to L+R.", juce::dontSendNotification);
+                channelWarningLabel.setVisible (true);
+            }
+            else
+            {
+                channelWarningLabel.setVisible (false);
+            }
         }
         else
         {
@@ -53,8 +71,24 @@ MainComponent::MainComponent (const juce::File& initialFile)
                 // Use first file for channel count info
                 creditsComponent.setFile (files[0]);
                 auto trackNames = WavChunkCopier::readIxmlTrackNames (files[0]);
-                manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels(), trackNames);
+                int numCh = creditsComponent.getFileChannels();
+                manualOptionsComponent.setFileChannelCount (numCh, trackNames);
                 creditsComponent.setFiles (files); // re-set to show batch info
+
+                if (numCh >= 3)
+                {
+                    channelWarningLabel.setText ("Note: Files have " + juce::String (numCh)
+                        + " channels. Auphonic processes max 2 channels \u2014 defaulting to L+R.", juce::dontSendNotification);
+                    channelWarningLabel.setVisible (true);
+                }
+                else
+                {
+                    channelWarningLabel.setVisible (false);
+                }
+            }
+            else
+            {
+                channelWarningLabel.setVisible (false);
             }
         }
 
@@ -149,6 +183,14 @@ void MainComponent::resized()
 
     // File list area (dynamic height based on file count)
     fileListComponent.setBounds (area.removeFromTop (fileListComponent.getDesiredHeight()));
+
+    // Channel warning (below file list, only when visible)
+    if (channelWarningLabel.isVisible())
+    {
+        area.removeFromTop (4);
+        // Two lines is enough for the warning text at 12pt in the available width
+        channelWarningLabel.setBounds (area.removeFromTop (30));
+    }
 
     // Audio player (only takes space when visible)
     if (audioPlayerComponent.isVisible())

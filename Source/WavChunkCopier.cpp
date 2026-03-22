@@ -139,34 +139,47 @@ juce::MemoryBlock updateIxmlForOutput (const juce::MemoryBlock& ixmlData,
             setChildText (speed, "AUDIO_BIT_DEPTH", juce::String (outputBitDepth));
     }
 
-    // Update TRACK_LIST if a single channel was extracted
-    if (extractedChannel > 0)
+    // Update TRACK_LIST if channels were extracted
+    // extractedChannel > 0: single channel, extractedChannel == -1: L+R (first two)
+    if (extractedChannel != 0)
     {
         if (auto* trackList = xml->getChildByName ("TRACK_LIST"))
         {
-            // Find the track matching the extracted channel and copy its name
-            // before deleting (to avoid use-after-free)
-            juce::String matchedTrackName;
-            bool foundMatch = false;
+            // Collect track info we want to keep, keyed by INTERLEAVE_INDEX
+            // (must copy data before deleting XML elements to avoid use-after-free)
+            struct TrackInfo { int interleaveIdx; juce::String channelIdx; juce::String name; };
+            juce::Array<TrackInfo> tracksToKeep;
+
             for (auto* track = trackList->getChildByName ("TRACK"); track != nullptr;
                  track = track->getNextElementWithTagName ("TRACK"))
             {
-                int idx = track->getChildElementAllSubText ("CHANNEL_INDEX", "0").getIntValue();
-                if (idx == extractedChannel)
+                int interleave = track->getChildElementAllSubText ("INTERLEAVE_INDEX", "0").getIntValue();
+                auto chIdx = track->getChildElementAllSubText ("CHANNEL_INDEX", "0");
+                auto name = track->getChildElementAllSubText ("NAME", "");
+
+                if (extractedChannel == -1)
                 {
-                    matchedTrackName = track->getChildElementAllSubText ("NAME", "");
-                    foundMatch = true;
-                    break;
+                    // L+R: keep tracks with interleave 1 and 2
+                    if (interleave == 1 || interleave == 2)
+                        tracksToKeep.add ({ interleave, chIdx, name });
+                }
+                else
+                {
+                    // Single channel: match by interleave position (1-based, same as UI channel number)
+                    if (interleave == extractedChannel)
+                        tracksToKeep.add ({ interleave, chIdx, name });
                 }
             }
 
             // Now safe to delete all TRACK children
             trackList->deleteAllChildElementsWithTagName ("TRACK");
 
-            setChildText (trackList, "TRACK_COUNT", "1");
+            int keepCount = tracksToKeep.size();
+            setChildText (trackList, "TRACK_COUNT", juce::String (keepCount > 0 ? keepCount : 1));
 
-            if (foundMatch)
+            for (int i = 0; i < tracksToKeep.size(); ++i)
             {
+                auto& info = tracksToKeep.getReference (i);
                 auto newTrack = std::make_unique<juce::XmlElement> ("TRACK");
 
                 auto addChild = [&] (const juce::String& tag, const juce::String& val) {
@@ -174,11 +187,21 @@ juce::MemoryBlock updateIxmlForOutput (const juce::MemoryBlock& ixmlData,
                     el->addTextElement (val);
                 };
 
-                addChild ("CHANNEL_INDEX", "1");
-                addChild ("INTERLEAVE_INDEX", "1");
+                if (extractedChannel > 0)
+                {
+                    // Single channel: renumber to 1
+                    addChild ("CHANNEL_INDEX", "1");
+                    addChild ("INTERLEAVE_INDEX", "1");
+                }
+                else
+                {
+                    // L+R: preserve original indices
+                    addChild ("CHANNEL_INDEX", info.channelIdx);
+                    addChild ("INTERLEAVE_INDEX", juce::String (info.interleaveIdx));
+                }
 
-                if (matchedTrackName.isNotEmpty())
-                    addChild ("NAME", matchedTrackName);
+                if (info.name.isNotEmpty())
+                    addChild ("NAME", info.name);
 
                 trackList->addChildElement (newTrack.release());
             }
