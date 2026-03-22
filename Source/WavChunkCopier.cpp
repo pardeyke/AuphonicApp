@@ -1,4 +1,5 @@
 #include "WavChunkCopier.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 namespace WavChunkCopier
 {
@@ -364,6 +365,125 @@ bool removeChunk (const juce::File& wavFile, const char* chunkId)
 bool writeIxmlChunk (const juce::File& wavFile, const juce::MemoryBlock& chunkData)
 {
     return writeChunk (wavFile, "iXML", chunkData);
+}
+
+bool mergeChannels (const juce::File& originalFile,
+                    const juce::File& outputFile,
+                    const std::map<int, juce::File>& processedChannelFiles)
+{
+    juce::AudioFormatManager mgr;
+    mgr.registerBasicFormats();
+
+    // Open original file
+    std::unique_ptr<juce::AudioFormatReader> origReader (mgr.createReaderFor (originalFile));
+    if (origReader == nullptr)
+        return false;
+
+    int numChannels = (int) origReader->numChannels;
+    double sampleRate = origReader->sampleRate;
+    int bitDepth = (int) origReader->bitsPerSample;
+    juce::int64 totalSamples = origReader->lengthInSamples;
+
+    // Open each processed channel file
+    std::map<int, std::unique_ptr<juce::AudioFormatReader>> channelReaders;
+    for (auto& [ch, file] : processedChannelFiles)
+    {
+        std::unique_ptr<juce::AudioFormatReader> r (mgr.createReaderFor (file));
+        if (r == nullptr)
+            return false;
+        channelReaders[ch] = std::move (r);
+    }
+
+    // Write to temp file, then move to output
+    auto tempOut = juce::File::getSpecialLocation (juce::File::tempDirectory)
+        .getChildFile ("auphonic_merge_" + juce::String (juce::Random::getSystemRandom().nextInt64()) + ".wav");
+
+    juce::WavAudioFormat wavFormat;
+    auto os = std::make_unique<juce::FileOutputStream> (tempOut);
+    if (! os->openedOk())
+        return false;
+
+    auto* writer = wavFormat.createWriterFor (os.get(), sampleRate,
+                                               (unsigned int) numChannels, bitDepth, {}, 0);
+    if (writer == nullptr)
+        return false;
+    os.release(); // writer owns the stream
+
+    std::unique_ptr<juce::AudioFormatWriter> writerOwner (writer);
+
+    const int blockSize = 65536;
+    juce::AudioBuffer<float> origBuffer (numChannels, blockSize);
+    juce::AudioBuffer<float> outBuffer (numChannels, blockSize);
+    juce::AudioBuffer<float> monoBuffer (1, blockSize);
+
+    juce::int64 samplesRemaining = totalSamples;
+    juce::int64 startSample = 0;
+
+    while (samplesRemaining > 0)
+    {
+        int samplesToProcess = (int) juce::jmin ((juce::int64) blockSize, samplesRemaining);
+
+        // Read all channels from original
+        if (! origReader->read (&origBuffer, 0, samplesToProcess, startSample, true, true))
+        {
+            tempOut.deleteFile();
+            return false;
+        }
+
+        // Copy original to output
+        for (int ch = 0; ch < numChannels; ++ch)
+            outBuffer.copyFrom (ch, 0, origBuffer, ch, 0, samplesToProcess);
+
+        // Overwrite processed channels
+        for (auto& [ch, reader] : channelReaders)
+        {
+            if (ch >= 0 && ch < numChannels)
+            {
+                juce::int64 chSamples = reader->lengthInSamples;
+                int availableSamples = (int) juce::jmin ((juce::int64) samplesToProcess,
+                                                          juce::jmax ((juce::int64) 0, chSamples - startSample));
+
+                if (availableSamples > 0)
+                {
+                    if (reader->read (&monoBuffer, 0, availableSamples, startSample, true, true))
+                        outBuffer.copyFrom (ch, 0, monoBuffer, 0, 0, availableSamples);
+                }
+            }
+        }
+
+        if (! writer->writeFromAudioSampleBuffer (outBuffer, 0, samplesToProcess))
+        {
+            tempOut.deleteFile();
+            return false;
+        }
+
+        startSample += samplesToProcess;
+        samplesRemaining -= samplesToProcess;
+    }
+
+    // Close writer before chunk operations
+    writerOwner.reset();
+    origReader.reset();
+
+    // Move temp to output
+    if (outputFile.existsAsFile())
+        outputFile.deleteFile();
+    if (! tempOut.moveFileTo (outputFile))
+        return false;
+
+    // Copy metadata from original
+    juce::MemoryBlock ixmlData;
+    if (readIxmlChunk (originalFile, ixmlData))
+        writeIxmlChunk (outputFile, ixmlData);
+
+    juce::MemoryBlock bextData;
+    if (readChunk (originalFile, "bext", bextData))
+        writeChunk (outputFile, "bext", bextData);
+
+    // Remove LIST chunk (Auphonic adds these)
+    removeChunk (outputFile, "LIST");
+
+    return true;
 }
 
 } // namespace WavChunkCopier

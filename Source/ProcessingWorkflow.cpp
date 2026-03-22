@@ -518,6 +518,30 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
 {
     setState (State::Saving);
 
+    if (tempOutputMode)
+    {
+        // In temp output mode, just rename the downloaded file in the temp directory
+        auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        auto namedTemp = tempDir.getChildFile ("auphonic_result_ch" + juce::String (extractChannel)
+            + "_" + juce::String (juce::Random::getSystemRandom().nextInt64()) + ".wav");
+
+        if (tempFile.moveFileTo (namedTemp))
+        {
+            lastOutputFile = namedTemp;
+            setState (State::Done);
+            if (listener)
+            {
+                listener->workflowProgressChanged (1.0, "Complete!");
+                listener->workflowCompleted();
+            }
+        }
+        else
+        {
+            setError ("Failed to save temp output file");
+        }
+        return;
+    }
+
     juce::String suffix = avoidOverwrite ? outputSuffix : juce::String{};
     auto dir = originalSourceFile.getParentDirectory();
     auto baseName = originalSourceFile.getFileNameWithoutExtension() + suffix;

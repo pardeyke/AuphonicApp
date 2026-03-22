@@ -507,29 +507,32 @@ void ManualOptionsComponent::resized()
     }
 
     // ── Output Format ──
-    addGap();
-    layoutLabelCombo (0, outputFormatLabel, 100, outputFormatCombo, 120);
-
-    if (bitrateCombo.isVisible())
-        layoutLabelCombo (0, bitrateLabel, 100, bitrateCombo, 120);
-
-    // ── Output Behavior ──
-    area.removeFromTop (2);
-    avoidOverwriteToggle.setBounds (area.removeFromTop (rowH));
-    addGap();
-
-    if (suffixEditor.isVisible())
+    if (! perChannelMode)
     {
-        auto row = area.removeFromTop (rowH);
-        row.removeFromLeft (indent);
-        suffixLabel.setBounds (row.removeFromLeft (50));
-        suffixEditor.setBounds (row.removeFromLeft (150));
         addGap();
-    }
+        layoutLabelCombo (0, outputFormatLabel, 100, outputFormatCombo, 120);
 
-    writeXmlToggle.setBounds (area.removeFromTop (rowH));
-    addGap();
-    keepTimecodeToggle.setBounds (area.removeFromTop (rowH));
+        if (bitrateCombo.isVisible())
+            layoutLabelCombo (0, bitrateLabel, 100, bitrateCombo, 120);
+
+        // ── Output Behavior ──
+        area.removeFromTop (2);
+        avoidOverwriteToggle.setBounds (area.removeFromTop (rowH));
+        addGap();
+
+        if (suffixEditor.isVisible())
+        {
+            auto row = area.removeFromTop (rowH);
+            row.removeFromLeft (indent);
+            suffixLabel.setBounds (row.removeFromLeft (50));
+            suffixEditor.setBounds (row.removeFromLeft (150));
+            addGap();
+        }
+
+        writeXmlToggle.setBounds (area.removeFromTop (rowH));
+        addGap();
+        keepTimecodeToggle.setBounds (area.removeFromTop (rowH));
+    }
 }
 
 int ManualOptionsComponent::getRequiredHeight() const
@@ -577,18 +580,21 @@ int ManualOptionsComponent::getRequiredHeight() const
     // Loudness row
     h += rowH;
 
-    // Output format row
-    h += gap + rowH;
-
-    // Bitrate row (lossy formats only)
-    if (bitrateCombo.isVisible())
+    if (! perChannelMode)
+    {
+        // Output format row
         h += gap + rowH;
 
-    // Output behavior toggles (always visible)
-    h += gap + 2 + rowH + gap; // avoidOverwrite toggle + gap
-    if (suffixEditor.isVisible()) h += rowH + gap;
-    h += rowH; // writeXml toggle
-    h += gap + rowH; // keepTimecode toggle
+        // Bitrate row (lossy formats only)
+        if (bitrateCombo.isVisible())
+            h += gap + rowH;
+
+        // Output behavior toggles (always visible)
+        h += gap + 2 + rowH + gap; // avoidOverwrite toggle + gap
+        if (suffixEditor.isVisible()) h += rowH + gap;
+        h += rowH; // writeXml toggle
+        h += gap + rowH; // keepTimecode toggle
+    }
 
     return h;
 }
@@ -702,17 +708,24 @@ juce::var ManualOptionsComponent::getSettings() const
 
     settings->setProperty ("algorithms", juce::var (algorithms.release()));
 
-    static const char* formats[] = { "wav", "wav-24bit", "flac", "alac", "mp3", "mp3-vbr", "aac", "vorbis", "opus" };
-    int fmtId = outputFormatCombo.getSelectedId();
-    if (fmtId == 10)
-        settings->setProperty ("output_format", "keep");
-    else if (fmtId >= 1 && fmtId <= 9)
-        settings->setProperty ("output_format", juce::String (formats[fmtId - 1]));
+    if (perChannelMode && forcedOutputFormat.isNotEmpty())
+    {
+        settings->setProperty ("output_format", forcedOutputFormat);
+    }
+    else
+    {
+        static const char* formats[] = { "wav", "wav-24bit", "flac", "alac", "mp3", "mp3-vbr", "aac", "vorbis", "opus" };
+        int fmtId = outputFormatCombo.getSelectedId();
+        if (fmtId == 10)
+            settings->setProperty ("output_format", "keep");
+        else if (fmtId >= 1 && fmtId <= 9)
+            settings->setProperty ("output_format", juce::String (formats[fmtId - 1]));
 
-    auto bitrateInfo = bitrateInfoForFormat (fmtId);
-    int bitrateIdx = bitrateCombo.getSelectedId() - 1;
-    if (bitrateInfo.values != nullptr && bitrateIdx >= 0 && bitrateIdx < bitrateInfo.count)
-        settings->setProperty ("output_bitrate", bitrateInfo.values[bitrateIdx]);
+        auto bitrateInfo = bitrateInfoForFormat (fmtId);
+        int bitrateIdx = bitrateCombo.getSelectedId() - 1;
+        if (bitrateInfo.values != nullptr && bitrateIdx >= 0 && bitrateIdx < bitrateInfo.count)
+            settings->setProperty ("output_bitrate", bitrateInfo.values[bitrateIdx]);
+    }
 
     return juce::var (settings.release());
 }
@@ -890,6 +903,43 @@ int ManualOptionsComponent::getSelectedChannel() const
     if (id == 1) return 0;                              // All Channels
     if (id == currentFileChannels + 2) return -1;       // L+R Channels (stereo extract)
     return (id - 1);                                    // id 2 = ch 1, id 3 = ch 2, etc.
+}
+
+void ManualOptionsComponent::setPerChannelMode (bool enabled)
+{
+    perChannelMode = enabled;
+
+    // In per-channel mode, hide channel selector, output format, and output behavior
+    if (perChannelMode)
+    {
+        channelLabel.setVisible (false);
+        channelCombo.setVisible (false);
+        outputFormatLabel.setVisible (false);
+        outputFormatCombo.setVisible (false);
+        bitrateLabel.setVisible (false);
+        bitrateCombo.setVisible (false);
+        avoidOverwriteToggle.setVisible (false);
+        suffixLabel.setVisible (false);
+        suffixEditor.setVisible (false);
+        writeXmlToggle.setVisible (false);
+        keepTimecodeToggle.setVisible (false);
+    }
+    else
+    {
+        outputFormatLabel.setVisible (true);
+        outputFormatCombo.setVisible (true);
+        avoidOverwriteToggle.setVisible (true);
+        writeXmlToggle.setVisible (true);
+        keepTimecodeToggle.setVisible (true);
+        updateDependentVisibility();
+    }
+
+    setSize (getWidth(), getRequiredHeight());
+}
+
+void ManualOptionsComponent::setForcedOutputFormat (const juce::String& format)
+{
+    forcedOutputFormat = format;
 }
 
 void ManualOptionsComponent::notifyChange()

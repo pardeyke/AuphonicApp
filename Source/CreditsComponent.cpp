@@ -81,6 +81,12 @@ void CreditsComponent::setPreviewDurationSeconds (double seconds)
     repaint();
 }
 
+void CreditsComponent::setChannelMultiplier (int multiplier)
+{
+    channelMultiplier = juce::jmax (1, multiplier);
+    repaint();
+}
+
 void CreditsComponent::paint (juce::Graphics& g)
 {
     if (availableCredits < 0.0)
@@ -105,7 +111,7 @@ void CreditsComponent::paint (juce::Graphics& g)
             double displayDuration = (previewDuration > 0.0)
                 ? previewDuration * batchFileCount
                 : batchTotalDurationSeconds;
-            double displayCostHours = displayDuration / 3600.0;
+            double displayCostHours = displayDuration / 3600.0 * channelMultiplier;
 
             int durationSecs = juce::roundToInt (displayDuration);
             int mins = durationSecs / 60;
@@ -131,7 +137,7 @@ void CreditsComponent::paint (juce::Graphics& g)
         {
             // Single file mode (original behavior)
             double displayDuration = (previewDuration > 0.0) ? previewDuration : fileDurationSeconds;
-            double displayCostHours = displayDuration / 3600.0;
+            double displayCostHours = displayDuration / 3600.0 * channelMultiplier;
 
             int durationSecs = juce::roundToInt (displayDuration);
             int mins = durationSecs / 60;

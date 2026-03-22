@@ -17,6 +17,7 @@ public:
     int getFileChannels() const { return fileChannels; }
     double getFileDurationSeconds() const { return fileDurationSeconds; }
     void setPreviewDurationSeconds (double seconds);
+    void setChannelMultiplier (int multiplier);
 
 private:
     static juce::String formatTime (double hours);
@@ -27,6 +28,7 @@ private:
     double fileDurationSeconds = 0.0;
     double previewDuration = 0.0;
     bool fileLoaded = false;
+    int channelMultiplier = 1;
 
     // Batch info
     int batchFileCount = 0;

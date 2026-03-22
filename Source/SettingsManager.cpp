@@ -40,3 +40,6 @@ void SettingsManager::setLastManualSettings (const juce::String& jsonString)   {
 
 juce::String SettingsManager::getAudioOutputDevice() const                     { return getValue ("audioOutputDevice"); }
 void SettingsManager::setAudioOutputDevice (const juce::String& deviceName)    { setValue ("audioOutputDevice", deviceName); }
+
+bool SettingsManager::getPerChannelMode() const            { return getValue ("perChannelMode", "0") == "1"; }
+void SettingsManager::setPerChannelMode (bool enabled)     { setValue ("perChannelMode", enabled ? "1" : "0"); }

@@ -43,6 +43,7 @@ public:
                 int channelToExtract = 0,
                 double previewDuration = 0.0,
                 bool keepTimecode = false);
+    void setTempOutputMode (bool enabled) { tempOutputMode = enabled; }
     void cancel();
 
     State getState() const { return state; }
@@ -84,6 +85,7 @@ private:
     int extractChannel = 0;      // 0 = all channels, 1-N = specific channel
     double previewDurationSeconds = 0.0; // 0 = full file
     bool keepTimecode = false;
+    bool tempOutputMode = false;  // when true, save to temp dir instead of final location
     juce::File extractedTempFile; // temp mono file when extracting a channel
     juce::File trimmedTempFile;   // temp file when trimming for preview
 

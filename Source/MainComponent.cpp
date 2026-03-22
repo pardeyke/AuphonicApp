@@ -17,6 +17,23 @@ MainComponent::MainComponent (const juce::File& initialFile)
     addAndMakeVisible (processButton);
     addAndMakeVisible (cancelButton);
 
+    addAndMakeVisible (wholeFileButton);
+    addAndMakeVisible (perChannelButton);
+    addChildComponent (channelTabsComponent);
+
+    wholeFileButton.onClick = [this] { setProcessingMode (false); };
+    perChannelButton.onClick = [this] { setProcessingMode (true); };
+
+    // Initial mode highlight (whole file is default)
+    wholeFileButton.setColour (juce::TextButton::buttonColourId,
+                                findColour (juce::TextButton::buttonOnColourId));
+
+    channelTabsComponent.onChange = [this] {
+        creditsComponent.setChannelMultiplier (channelTabsComponent.getEnabledChannelCount());
+        saveCurrentConfig();
+        updateButtonStates();
+    };
+
     optionsViewport.setViewedComponent (&manualOptionsComponent, false);
     optionsViewport.setScrollBarsShown (true, false);
 
@@ -48,9 +65,11 @@ MainComponent::MainComponent (const juce::File& initialFile)
             creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
             auto trackNames = WavChunkCopier::readIxmlTrackNames (files[0]);
             int numCh = creditsComponent.getFileChannels();
+            int bitDepth = WavChunkCopier::readWavBitDepth (files[0]);
             manualOptionsComponent.setFileChannelCount (numCh, trackNames);
+            channelTabsComponent.setChannels (numCh, trackNames, bitDepth);
 
-            if (numCh >= 3)
+            if (numCh >= 3 && ! perChannelMode)
             {
                 channelWarningLabel.setText ("Note: File has " + juce::String (numCh)
                     + " channels. Auphonic processes max 2 channels \u2014 defaulting to L+R.", juce::dontSendNotification);
@@ -72,10 +91,12 @@ MainComponent::MainComponent (const juce::File& initialFile)
                 creditsComponent.setFile (files[0]);
                 auto trackNames = WavChunkCopier::readIxmlTrackNames (files[0]);
                 int numCh = creditsComponent.getFileChannels();
+                int bitDepth = WavChunkCopier::readWavBitDepth (files[0]);
                 manualOptionsComponent.setFileChannelCount (numCh, trackNames);
+                channelTabsComponent.setChannels (numCh, trackNames, bitDepth);
                 creditsComponent.setFiles (files); // re-set to show batch info
 
-                if (numCh >= 3)
+                if (numCh >= 3 && ! perChannelMode)
                 {
                     channelWarningLabel.setText ("Note: Files have " + juce::String (numCh)
                         + " channels. Auphonic processes max 2 channels \u2014 defaulting to L+R.", juce::dontSendNotification);
@@ -110,7 +131,17 @@ MainComponent::MainComponent (const juce::File& initialFile)
             apiClient->fetchPresetDetails (uuid, [this] (bool success, const juce::var& algorithms)
             {
                 if (success)
-                    manualOptionsComponent.applyApiSettings (algorithms);
+                {
+                    if (perChannelMode)
+                    {
+                        if (auto* opts = channelTabsComponent.getActiveTabOptions())
+                            opts->applyApiSettings (algorithms);
+                    }
+                    else
+                    {
+                        manualOptionsComponent.applyApiSettings (algorithms);
+                    }
+                }
                 saveCurrentConfig();
                 updateButtonStates();
             });
@@ -230,11 +261,28 @@ void MainComponent::resized()
 
     area.removeFromBottom (8);
 
-    // Manual options in viewport (fills remaining space)
-    optionsViewport.setBounds (area);
+    // Mode toggle row
+    {
+        auto modeRow = area.removeFromTop (26);
+        int modeWidth = 90;
+        wholeFileButton.setBounds (modeRow.removeFromLeft (modeWidth));
+        modeRow.removeFromLeft (4);
+        perChannelButton.setBounds (modeRow.removeFromLeft (modeWidth));
+    }
 
-    int vpWidth = optionsViewport.getMaximumVisibleWidth();
-    manualOptionsComponent.setSize (vpWidth, manualOptionsComponent.getRequiredHeight());
+    area.removeFromTop (8);
+
+    // Manual options or channel tabs (fills remaining space)
+    if (perChannelMode)
+    {
+        channelTabsComponent.setBounds (area);
+    }
+    else
+    {
+        optionsViewport.setBounds (area);
+        int vpWidth = optionsViewport.getMaximumVisibleWidth();
+        manualOptionsComponent.setSize (vpWidth, manualOptionsComponent.getRequiredHeight());
+    }
 }
 
 void MainComponent::setFile (const juce::File& file)
@@ -254,6 +302,35 @@ void MainComponent::onSettingsClicked()
     });
 }
 
+void MainComponent::setProcessingMode (bool perChannel)
+{
+    perChannelMode = perChannel;
+
+    optionsViewport.setVisible (! perChannel);
+    channelTabsComponent.setVisible (perChannel);
+
+    // Update button highlights
+    auto highlight = findColour (juce::TextButton::buttonOnColourId);
+    auto normal = findColour (juce::TextButton::buttonColourId);
+    wholeFileButton.setColour (juce::TextButton::buttonColourId, perChannel ? normal : highlight);
+    perChannelButton.setColour (juce::TextButton::buttonColourId, perChannel ? highlight : normal);
+
+    // In per-channel mode, force full preview duration
+    previewDurationComponent.setForceFullDuration (perChannel);
+    creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
+
+    // Update channel warning visibility
+    if (perChannel)
+        channelWarningLabel.setVisible (false);
+
+    // Update credits multiplier
+    creditsComponent.setChannelMultiplier (perChannel ? channelTabsComponent.getEnabledChannelCount() : 1);
+
+    settingsManager.setPerChannelMode (perChannel);
+    resized();
+    updateButtonStates();
+}
+
 void MainComponent::onProcessClicked()
 {
     auto files = fileListComponent.getFiles();
@@ -271,34 +348,96 @@ void MainComponent::onProcessClicked()
         return;
     }
 
-    // Use preset UUID only if unmodified; otherwise send manual settings
-    auto presetUuid = presetListComponent.getSelectedPresetUuid(); // empty if modified or no preset
-    juce::var manualSettings;
-
-    if (presetUuid.isEmpty())
+    if (perChannelMode)
     {
-        if (! manualOptionsComponent.hasAnyEnabled())
+        auto channelSettings = channelTabsComponent.getEnabledChannelSettings();
+        if (channelSettings.isEmpty())
         {
             juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                "No Options", "Please select a preset or enable at least one processing option.");
+                "No Options", "Enable processing on at least one channel tab.");
             return;
         }
-        manualSettings = manualOptionsComponent.getSettings();
+
+        // Validate batch: all files must have same channel count
+        if (files.size() > 1)
+        {
+            juce::AudioFormatManager mgr;
+            mgr.registerBasicFormats();
+            int expectedChannels = -1;
+            for (auto& f : files)
+            {
+                std::unique_ptr<juce::AudioFormatReader> reader (mgr.createReaderFor (f));
+                if (reader != nullptr)
+                {
+                    int ch = (int) reader->numChannels;
+                    if (expectedChannels < 0) expectedChannels = ch;
+                    else if (ch != expectedChannels)
+                    {
+                        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                            "Channel Mismatch",
+                            "All files must have the same number of channels for per-channel processing.");
+                        return;
+                    }
+                }
+            }
+        }
+
+        audioPlayerComponent.stop();
+        saveCurrentConfig();
+        fileListComponent.setEnabled (false);
+        statusComponent.reset();
+
+        // Build per-channel file jobs
+        juce::Array<BatchWorkflow::PerChannelFileJob> fileJobs;
+        for (auto& f : files)
+        {
+            BatchWorkflow::PerChannelFileJob job;
+            job.inputFile = f;
+            for (auto& cs : channelSettings)
+            {
+                BatchWorkflow::ChannelJob chJob;
+                chJob.channel = cs.channel;
+                chJob.settings = cs.settings;
+                job.channels.add (chJob);
+            }
+            fileJobs.add (job);
+        }
+
+        batchWorkflow->startPerChannel (fileJobs,
+                                         channelTabsComponent.shouldAvoidOverwrite(),
+                                         channelTabsComponent.getOutputSuffix(),
+                                         channelTabsComponent.shouldWriteSettingsXml());
     }
+    else
+    {
+        // Use preset UUID only if unmodified; otherwise send manual settings
+        auto presetUuid = presetListComponent.getSelectedPresetUuid();
+        juce::var manualSettings;
 
-    audioPlayerComponent.stop();
-    saveCurrentConfig();
+        if (presetUuid.isEmpty())
+        {
+            if (! manualOptionsComponent.hasAnyEnabled())
+            {
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                    "No Options", "Please select a preset or enable at least one processing option.");
+                return;
+            }
+            manualSettings = manualOptionsComponent.getSettings();
+        }
 
-    fileListComponent.setEnabled (false);
-    statusComponent.reset();
+        audioPlayerComponent.stop();
+        saveCurrentConfig();
+        fileListComponent.setEnabled (false);
+        statusComponent.reset();
 
-    batchWorkflow->start (files, presetUuid, manualSettings,
-                          manualOptionsComponent.shouldAvoidOverwrite(),
-                          manualOptionsComponent.getOutputSuffix(),
-                          manualOptionsComponent.shouldWriteSettingsXml(),
-                          manualOptionsComponent.getSelectedChannel(),
-                          previewDurationComponent.getPreviewDurationSeconds(),
-                          manualOptionsComponent.shouldKeepTimecode());
+        batchWorkflow->start (files, presetUuid, manualSettings,
+                              manualOptionsComponent.shouldAvoidOverwrite(),
+                              manualOptionsComponent.getOutputSuffix(),
+                              manualOptionsComponent.shouldWriteSettingsXml(),
+                              manualOptionsComponent.getSelectedChannel(),
+                              previewDurationComponent.getPreviewDurationSeconds(),
+                              manualOptionsComponent.shouldKeepTimecode());
+    }
 
     updateButtonStates();
 }
@@ -419,6 +558,11 @@ void MainComponent::restoreLastConfig()
         auto parsed = juce::JSON::parse (manualJson);
         manualOptionsComponent.applyWidgetState (parsed);
     }
+
+    // Restore per-channel mode
+    bool savedPerChannel = settingsManager.getPerChannelMode();
+    if (savedPerChannel != perChannelMode)
+        setProcessingMode (savedPerChannel);
 }
 
 void MainComponent::updateButtonStates()

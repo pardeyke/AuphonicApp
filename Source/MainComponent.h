@@ -12,6 +12,7 @@
 #include "CreditsComponent.h"
 #include "AudioPlayerComponent.h"
 #include "PreviewDurationComponent.h"
+#include "ChannelTabsComponent.h"
 
 class MainComponent : public juce::Component,
                       public BatchWorkflow::Listener
@@ -42,6 +43,7 @@ private:
     void updateButtonStates();
     void saveCurrentConfig();
     void restoreLastConfig();
+    void setProcessingMode (bool perChannel);
 
     SettingsManager settingsManager;
     std::unique_ptr<AuphonicApiClient> apiClient;
@@ -58,6 +60,11 @@ private:
     ManualOptionsComponent manualOptionsComponent;
     juce::Viewport optionsViewport;
     StatusComponent statusComponent;
+
+    ChannelTabsComponent channelTabsComponent;
+    juce::TextButton wholeFileButton { "Whole File" };
+    juce::TextButton perChannelButton { "Per Channel" };
+    bool perChannelMode = false;
 
     juce::Label channelWarningLabel;
     juce::TextButton processButton { "Process" };

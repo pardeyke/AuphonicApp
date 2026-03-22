@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <map>
 
 namespace WavChunkCopier
 {
@@ -37,4 +38,12 @@ namespace WavChunkCopier
 
     /** Convenience wrappers for iXML chunks. */
     bool writeIxmlChunk (const juce::File& wavFile, const juce::MemoryBlock& chunkData);
+
+    /** Merges processed mono channel files back into a multi-channel WAV.
+        processedChannelFiles maps 0-based channel index → processed mono WAV file.
+        Channels not in the map are copied from the original file.
+        Copies iXML and bext chunks from the original and removes LIST chunks. */
+    bool mergeChannels (const juce::File& originalFile,
+                        const juce::File& outputFile,
+                        const std::map<int, juce::File>& processedChannelFiles);
 }

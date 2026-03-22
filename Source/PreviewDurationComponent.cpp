@@ -88,6 +88,23 @@ void PreviewDurationComponent::updateVisibleButtons()
     resized();
 }
 
+void PreviewDurationComponent::setForceFullDuration (bool force)
+{
+    forceFullDuration = force;
+
+    if (force)
+    {
+        selectButton (0);
+        for (auto& btn : buttons)
+            btn->setEnabled (false);
+    }
+    else
+    {
+        for (auto& btn : buttons)
+            btn->setEnabled (true);
+    }
+}
+
 void PreviewDurationComponent::selectButton (int index)
 {
     selectedIndex = index;

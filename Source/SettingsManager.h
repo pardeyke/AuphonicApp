@@ -20,6 +20,9 @@ public:
     juce::String getAudioOutputDevice() const;
     void setAudioOutputDevice (const juce::String& deviceName);
 
+    bool getPerChannelMode() const;
+    void setPerChannelMode (bool enabled);
+
 private:
     juce::String getValue (const juce::String& key, const juce::String& defaultValue = {}) const;
     void setValue (const juce::String& key, const juce::String& value);

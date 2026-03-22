@@ -42,6 +42,7 @@ target_sources(AuphonicApp PRIVATE
     Source/PreviewDurationComponent.cpp
     Source/DesktopNotification.mm
     Source/WavChunkCopier.cpp
+    Source/ChannelTabsComponent.cpp
 )
 
 target_compile_definitions(AuphonicApp PRIVATE

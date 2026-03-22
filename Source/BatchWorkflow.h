@@ -1,8 +1,10 @@
 #pragma once
 
 #include <juce_events/juce_events.h>
+#include <map>
 #include "AuphonicApiClient.h"
 #include "ProcessingWorkflow.h"
+#include "WavChunkCopier.h"
 
 class BatchWorkflow : private juce::Timer
 {
@@ -21,6 +23,17 @@ public:
         virtual void batchCompleted (const juce::Array<FileResult>& results) = 0;
     };
 
+    struct ChannelJob {
+        int channel;              // 1-based channel index
+        juce::String presetUuid;
+        juce::var settings;       // algorithm settings with forced WAV output format
+    };
+
+    struct PerChannelFileJob {
+        juce::File inputFile;
+        juce::Array<ChannelJob> channels;
+    };
+
     BatchWorkflow (AuphonicApiClient& apiClient);
     ~BatchWorkflow() override;
 
@@ -33,6 +46,10 @@ public:
                 int channelToExtract = 0,
                 double previewDuration = 0.0,
                 bool keepTimecode = false);
+    void startPerChannel (const juce::Array<PerChannelFileJob>& fileJobs,
+                          bool avoidOverwrite,
+                          const juce::String& outputSuffix,
+                          bool writeSettingsXml);
     void cancel();
     bool isRunning() const { return running; }
 
@@ -46,6 +63,8 @@ private:
     void launchNext();
     void onSlotCompleted (int index);
     void checkAllDone();
+    void mergeFileGroup (int groupIndex);
+    void checkAllGroupsDone();
 
     static juce::String stateToStatus (ProcessingWorkflow::State state);
 
@@ -72,9 +91,14 @@ private:
         void workflowCompleted() override;
         void workflowFailed (const juce::String& errorMessage) override;
 
+        int getChannel() const { return channelNum; }
+        ProcessingWorkflow& getWorkflow() { return workflow; }
+        void setChannel (int ch) { channelNum = ch; }
+
     private:
         BatchWorkflow& owner;
         int index;
+        int channelNum = 0; // 0 = whole-file mode, 1-based for per-channel
         ProcessingWorkflow workflow;
         bool finished = false;
         bool started = false;
@@ -102,6 +126,29 @@ private:
     int channelToExtract = 0;
     double previewDuration = 0.0;
     bool keepTimecode = false;
+
+    // Per-channel slot info (used when per-channel mode is active)
+    struct SlotInfo {
+        juce::File inputFile;
+        int channel;              // 1-based
+        juce::String presetUuid;
+        juce::var settings;
+    };
+    juce::Array<SlotInfo> slotInfos;
+
+    // Per-channel mode
+    struct FileGroup {
+        int fileIndex;                                    // index in results array
+        juce::File inputFile;
+        juce::Array<int> slotIndices;                     // indices into slots array
+        std::map<int, int> channelToSlotIndex;            // channel -> slot index
+        std::map<int, juce::File> completedChannelFiles;  // channel -> downloaded temp file
+        int completedCount = 0;
+        int failedCount = 0;
+        bool mergeComplete = false;
+    };
+    juce::Array<FileGroup> fileGroups;
+    bool perChannelMode = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BatchWorkflow)
 };

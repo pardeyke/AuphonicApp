@@ -12,6 +12,8 @@ public:
     void setFileDuration (double durationSeconds);
     double getPreviewDurationSeconds() const;
 
+    void setForceFullDuration (bool force);
+
     std::function<void()> onChange;
 
 private:
@@ -29,6 +31,7 @@ private:
     std::vector<std::unique_ptr<juce::TextButton>> buttons;
     int selectedIndex = 0; // 0 = "Full"
     double fileDuration = 0.0;
+    bool forceFullDuration = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PreviewDurationComponent)
 };

@@ -27,6 +27,11 @@ public:
     bool shouldWriteSettingsXml() const { return writeXmlToggle.getToggleState(); }
     bool shouldKeepTimecode() const    { return keepTimecodeToggle.getToggleState(); }
 
+    void setPerChannelMode (bool enabled);
+    bool isPerChannelMode() const { return perChannelMode; }
+
+    void setForcedOutputFormat (const juce::String& format);
+
     std::function<void()> onChange;
 
 private:
@@ -49,6 +54,8 @@ private:
     juce::Label channelLabel { {}, "Channel:" };
     juce::ComboBox channelCombo;
     int currentFileChannels = 0;
+    bool perChannelMode = false;
+    juce::String forcedOutputFormat;
 
     // --- Adaptive Leveler ---
     juce::ToggleButton levelerToggle { "Adaptive Leveler" };

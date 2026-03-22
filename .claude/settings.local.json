@@ -20,7 +20,9 @@
       "Bash(ls:*)",
       "Bash(find /Users/aloysius/Projects/AuphonicApp -maxdepth 2 -type f \\\\\\(-name *.md -o -name CLAUDE.md -o -name .claude* \\\\\\))",
       "Bash(curl:*)",
-      "Bash(./Packaging/build.sh)"
+      "Bash(./Packaging/build.sh)",
+      "Bash(timeout 3 ./build/AuphonicApp_artefacts/Release/AuphonicApp.app/Contents/MacOS/AuphonicApp)",
+      "Bash(gtimeout 3 ./build/AuphonicApp_artefacts/Release/AuphonicApp.app/Contents/MacOS/AuphonicApp)"
     ]
   }
 }
