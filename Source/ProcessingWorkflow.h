@@ -41,7 +41,8 @@ public:
                 const juce::String& outputSuffix,
                 bool writeSettingsXml,
                 int channelToExtract = 0,
-                double previewDuration = 0.0);
+                double previewDuration = 0.0,
+                bool keepTimecode = false);
     void cancel();
 
     State getState() const { return state; }
@@ -82,6 +83,7 @@ private:
     bool cancelled = false;
     int extractChannel = 0;      // 0 = all channels, 1-N = specific channel
     double previewDurationSeconds = 0.0; // 0 = full file
+    bool keepTimecode = false;
     juce::File extractedTempFile; // temp mono file when extracting a channel
     juce::File trimmedTempFile;   // temp file when trimming for preview
 

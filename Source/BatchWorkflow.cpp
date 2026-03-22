@@ -15,12 +15,13 @@ void BatchWorkflow::WorkflowSlot::start (const juce::File& file,
                                           const juce::String& suffix,
                                           bool writeXml,
                                           int channel,
-                                          double preview)
+                                          double preview,
+                                          bool timecode)
 {
     started = true;
     workflow.start (file, preset, settings,
                     overwrite, suffix, writeXml,
-                    channel, preview);
+                    channel, preview, timecode);
 }
 
 void BatchWorkflow::WorkflowSlot::cancel()
@@ -86,7 +87,8 @@ void BatchWorkflow::start (const juce::Array<juce::File>& files,
                             const juce::String& suffix,
                             bool writeXml,
                             int channel,
-                            double preview)
+                            double preview,
+                            bool timecode)
 {
     cancel();
 
@@ -97,6 +99,7 @@ void BatchWorkflow::start (const juce::Array<juce::File>& files,
     writeSettingsXml = writeXml;
     channelToExtract = channel;
     previewDuration = preview;
+    keepTimecode = timecode;
 
     slots.clear();
     results.clear();
@@ -154,7 +157,7 @@ void BatchWorkflow::launchNext()
         slots[idx]->start (results[idx].inputFile,
                            presetUuid, manualSettings,
                            avoidOverwrite, outputSuffix, writeSettingsXml,
-                           channelToExtract, previewDuration);
+                           channelToExtract, previewDuration, keepTimecode);
     }
 
     // Update overall progress

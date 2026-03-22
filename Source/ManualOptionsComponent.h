@@ -25,6 +25,7 @@ public:
     bool shouldAvoidOverwrite() const  { return avoidOverwriteToggle.getToggleState(); }
     juce::String getOutputSuffix() const { return suffixEditor.getText(); }
     bool shouldWriteSettingsXml() const { return writeXmlToggle.getToggleState(); }
+    bool shouldKeepTimecode() const    { return keepTimecodeToggle.getToggleState(); }
 
     std::function<void()> onChange;
 
@@ -116,6 +117,7 @@ private:
     juce::Label suffixLabel { {}, "Suffix:" };
     juce::TextEditor suffixEditor;
     juce::ToggleButton writeXmlToggle       { "Write settings JSON alongside output" };
+    juce::ToggleButton keepTimecodeToggle   { "Keep timecode (iXML)" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ManualOptionsComponent)
 };

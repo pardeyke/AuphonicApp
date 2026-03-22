@@ -31,7 +31,8 @@ public:
                 const juce::String& outputSuffix,
                 bool writeSettingsXml,
                 int channelToExtract = 0,
-                double previewDuration = 0.0);
+                double previewDuration = 0.0,
+                bool keepTimecode = false);
     void cancel();
     bool isRunning() const { return running; }
 
@@ -60,7 +61,8 @@ private:
                     const juce::String& outputSuffix,
                     bool writeSettingsXml,
                     int channelToExtract,
-                    double previewDuration);
+                    double previewDuration,
+                    bool keepTimecode);
         void cancel();
         bool isFinished() const { return finished; }
 
@@ -99,6 +101,7 @@ private:
     bool writeSettingsXml = false;
     int channelToExtract = 0;
     double previewDuration = 0.0;
+    bool keepTimecode = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BatchWorkflow)
 };

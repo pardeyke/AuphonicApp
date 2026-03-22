@@ -1,4 +1,5 @@
 #include "ProcessingWorkflow.h"
+#include "WavChunkCopier.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
 ProcessingWorkflow::ProcessingWorkflow (AuphonicApiClient& apiClient)
@@ -18,7 +19,8 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
                                  const juce::String& outputSuffixStr,
                                  bool writeSettingsXmlFlag,
                                  int channelToExtract,
-                                 double previewDuration)
+                                 double previewDuration,
+                                 bool keepTimecodeFlag)
 {
     cancel();
 
@@ -35,6 +37,7 @@ void ProcessingWorkflow::start (const juce::File& inputFile,
     writeSettingsXml = writeSettingsXmlFlag;
     extractChannel = channelToExtract;
     previewDurationSeconds = previewDuration;
+    keepTimecode = keepTimecodeFlag;
     extractedTempFile = juce::File();
     trimmedTempFile = juce::File();
 
@@ -515,6 +518,16 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
     if (success)
     {
         lastOutputFile = outputFile;
+
+        if (keepTimecode && outputFile.getFileExtension().toLowerCase() == ".wav")
+        {
+            juce::MemoryBlock ixmlData;
+            if (WavChunkCopier::readIxmlChunk (originalSourceFile, ixmlData))
+            {
+                if (! WavChunkCopier::writeIxmlChunk (outputFile, ixmlData))
+                    DBG ("Warning: failed to write iXML chunk to output file");
+            }
+        }
 
         if (writeSettingsXml)
         {

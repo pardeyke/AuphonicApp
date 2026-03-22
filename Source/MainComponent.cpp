@@ -252,7 +252,8 @@ void MainComponent::onProcessClicked()
                           manualOptionsComponent.getOutputSuffix(),
                           manualOptionsComponent.shouldWriteSettingsXml(),
                           manualOptionsComponent.getSelectedChannel(),
-                          previewDurationComponent.getPreviewDurationSeconds());
+                          previewDurationComponent.getPreviewDurationSeconds(),
+                          manualOptionsComponent.shouldKeepTimecode());
 
     updateButtonStates();
 }

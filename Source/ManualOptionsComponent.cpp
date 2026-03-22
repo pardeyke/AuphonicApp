@@ -200,6 +200,9 @@ ManualOptionsComponent::ManualOptionsComponent()
     addAndMakeVisible (writeXmlToggle);
     writeXmlToggle.onClick = [this] { notifyChange(); };
 
+    addAndMakeVisible (keepTimecodeToggle);
+    keepTimecodeToggle.onClick = [this] { notifyChange(); };
+
     updateDependentVisibility();
 }
 
@@ -525,6 +528,8 @@ void ManualOptionsComponent::resized()
     }
 
     writeXmlToggle.setBounds (area.removeFromTop (rowH));
+    addGap();
+    keepTimecodeToggle.setBounds (area.removeFromTop (rowH));
 }
 
 int ManualOptionsComponent::getRequiredHeight() const
@@ -583,6 +588,7 @@ int ManualOptionsComponent::getRequiredHeight() const
     h += gap + 2 + rowH + gap; // avoidOverwrite toggle + gap
     if (suffixEditor.isVisible()) h += rowH + gap;
     h += rowH; // writeXml toggle
+    h += gap + rowH; // keepTimecode toggle
 
     return h;
 }
@@ -755,6 +761,7 @@ juce::var ManualOptionsComponent::getWidgetState() const
     state->setProperty ("avoidOverwrite",  avoidOverwriteToggle.getToggleState());
     state->setProperty ("outputSuffix",    suffixEditor.getText());
     state->setProperty ("writeXml",        writeXmlToggle.getToggleState());
+    state->setProperty ("keepTimecode",    keepTimecodeToggle.getToggleState());
     state->setProperty ("selectedChannel", channelCombo.getSelectedId());
 
     return juce::var (state.release());
@@ -812,6 +819,7 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
         suffixEditor.setText (suffix, juce::dontSendNotification);
     }
     setToggle (writeXmlToggle, "writeXml", false);
+    setToggle (keepTimecodeToggle, "keepTimecode", false);
     setCombo (channelCombo, "selectedChannel", 1);
 
     suppressCallbacks = false;
