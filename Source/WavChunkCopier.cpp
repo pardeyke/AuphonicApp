@@ -58,7 +58,7 @@ static void setChildText (juce::XmlElement* parent, const juce::String& tagName,
 
 // ── Public API ──
 
-bool readIxmlChunk (const juce::File& wavFile, juce::MemoryBlock& chunkData)
+bool readChunk (const juce::File& wavFile, const char* chunkId, juce::MemoryBlock& chunkData)
 {
     juce::FileInputStream stream (wavFile);
     if (! stream.openedOk())
@@ -67,7 +67,12 @@ bool readIxmlChunk (const juce::File& wavFile, juce::MemoryBlock& chunkData)
     if (! isRiffWave (stream))
         return false;
 
-    return findChunk (stream, "iXML", &chunkData);
+    return findChunk (stream, chunkId, &chunkData);
+}
+
+bool readIxmlChunk (const juce::File& wavFile, juce::MemoryBlock& chunkData)
+{
+    return readChunk (wavFile, "iXML", chunkData);
 }
 
 juce::StringArray readIxmlTrackNames (const juce::File& wavFile)
@@ -206,66 +211,135 @@ int readWavBitDepth (const juce::File& wavFile)
     return (int) bytes[14] | ((int) bytes[15] << 8);
 }
 
-bool writeIxmlChunk (const juce::File& wavFile, const juce::MemoryBlock& chunkData)
+bool writeChunk (const juce::File& wavFile, const char* chunkId, const juce::MemoryBlock& chunkData)
 {
-    // First, verify this is a RIFF/WAVE file and check for existing iXML
-    {
-        juce::FileInputStream stream (wavFile);
-        if (! stream.openedOk())
-            return false;
-
-        if (! isRiffWave (stream))
-            return false;
-
-        if (findChunk (stream, "iXML", nullptr))
-            return true; // already has iXML, nothing to do
-    }
-
-    // Build the chunk: "iXML" tag + 4-byte LE size + data + optional pad byte
-    auto dataSize = (uint32_t) chunkData.getSize();
-    bool needsPad = (dataSize & 1) != 0;
-    size_t chunkTotalSize = 8 + dataSize + (needsPad ? 1 : 0);
-
-    juce::MemoryBlock chunkBytes (chunkTotalSize, true);
-    auto* dst = static_cast<char*> (chunkBytes.getData());
-
-    // Tag
-    std::memcpy (dst, "iXML", 4);
-
-    // Size (little-endian)
-    dst[4] = (char) (dataSize & 0xFF);
-    dst[5] = (char) ((dataSize >> 8) & 0xFF);
-    dst[6] = (char) ((dataSize >> 16) & 0xFF);
-    dst[7] = (char) ((dataSize >> 24) & 0xFF);
-
-    // Data
-    std::memcpy (dst + 8, chunkData.getData(), dataSize);
-
-    // Pad byte is already zero from MemoryBlock initialization
-
-    // Append chunk to file
-    if (! wavFile.appendData (chunkBytes.getData(), chunkBytes.getSize()))
-        return false;
-
-    // Update the RIFF size field at offset 4
-    auto newFileSize = wavFile.getSize();
-    uint32_t riffSize = (uint32_t) (newFileSize - 8);
-
-    // Read entire file, patch the size, write back
+    // Load entire file into memory
     juce::MemoryBlock fileData;
     if (! wavFile.loadFileAsData (fileData))
         return false;
 
-    if (fileData.getSize() < 8)
+    auto* src = static_cast<const uint8_t*> (fileData.getData());
+    auto fileSize = fileData.getSize();
+
+    if (fileSize < 12)
         return false;
 
-    auto* fileBytes = static_cast<char*> (fileData.getData());
-    fileBytes[4] = (char) (riffSize & 0xFF);
-    fileBytes[5] = (char) ((riffSize >> 8) & 0xFF);
-    fileBytes[6] = (char) ((riffSize >> 16) & 0xFF);
-    fileBytes[7] = (char) ((riffSize >> 24) & 0xFF);
+    // Verify RIFF/WAVE header
+    if (std::memcmp (src, "RIFF", 4) != 0 || std::memcmp (src + 8, "WAVE", 4) != 0)
+        return false;
 
-    return wavFile.replaceWithData (fileData.getData(), fileData.getSize());
+    // Build output: copy all chunks except any existing one with the same ID,
+    // then append the new chunk at the end
+    juce::MemoryBlock output;
+    output.append (src, 12); // RIFF header + "WAVE"
+
+    size_t pos = 12;
+    while (pos + 8 <= fileSize)
+    {
+        auto* tag = src + pos;
+        uint32_t sz = (uint32_t) src[pos + 4]
+                    | ((uint32_t) src[pos + 5] << 8)
+                    | ((uint32_t) src[pos + 6] << 16)
+                    | ((uint32_t) src[pos + 7] << 24);
+        size_t chunkTotal = 8 + sz + (sz & 1); // header + data + pad
+
+        if (pos + chunkTotal > fileSize)
+            chunkTotal = fileSize - pos; // truncated last chunk: keep as-is
+
+        // Skip chunks matching the target ID — we'll append the replacement
+        if (std::memcmp (tag, chunkId, 4) != 0)
+            output.append (src + pos, chunkTotal);
+
+        pos += chunkTotal;
+    }
+
+    // Append the new chunk
+    {
+        auto dataSize = (uint32_t) chunkData.getSize();
+        bool needsPad = (dataSize & 1) != 0;
+        size_t newChunkSize = 8 + dataSize + (needsPad ? 1 : 0);
+
+        juce::MemoryBlock chunkBytes (newChunkSize, true);
+        auto* dst = static_cast<char*> (chunkBytes.getData());
+
+        std::memcpy (dst, chunkId, 4);
+        dst[4] = (char) (dataSize & 0xFF);
+        dst[5] = (char) ((dataSize >> 8) & 0xFF);
+        dst[6] = (char) ((dataSize >> 16) & 0xFF);
+        dst[7] = (char) ((dataSize >> 24) & 0xFF);
+        std::memcpy (dst + 8, chunkData.getData(), dataSize);
+
+        output.append (chunkBytes.getData(), chunkBytes.getSize());
+    }
+
+    // Patch RIFF size at offset 4
+    auto* outBytes = static_cast<char*> (output.getData());
+    uint32_t riffSize = (uint32_t) (output.getSize() - 8);
+    outBytes[4] = (char) (riffSize & 0xFF);
+    outBytes[5] = (char) ((riffSize >> 8) & 0xFF);
+    outBytes[6] = (char) ((riffSize >> 16) & 0xFF);
+    outBytes[7] = (char) ((riffSize >> 24) & 0xFF);
+
+    return wavFile.replaceWithData (output.getData(), output.getSize());
+}
+
+bool removeChunk (const juce::File& wavFile, const char* chunkId)
+{
+    juce::MemoryBlock fileData;
+    if (! wavFile.loadFileAsData (fileData))
+        return false;
+
+    auto* src = static_cast<const uint8_t*> (fileData.getData());
+    auto fileSize = fileData.getSize();
+
+    if (fileSize < 12)
+        return false;
+
+    if (std::memcmp (src, "RIFF", 4) != 0 || std::memcmp (src + 8, "WAVE", 4) != 0)
+        return false;
+
+    juce::MemoryBlock output;
+    output.append (src, 12);
+
+    bool found = false;
+    size_t pos = 12;
+    while (pos + 8 <= fileSize)
+    {
+        auto* tag = src + pos;
+        uint32_t sz = (uint32_t) src[pos + 4]
+                    | ((uint32_t) src[pos + 5] << 8)
+                    | ((uint32_t) src[pos + 6] << 16)
+                    | ((uint32_t) src[pos + 7] << 24);
+        size_t chunkTotal = 8 + sz + (sz & 1);
+
+        if (pos + chunkTotal > fileSize)
+            chunkTotal = fileSize - pos;
+
+        if (std::memcmp (tag, chunkId, 4) == 0)
+            found = true;
+        else
+            output.append (src + pos, chunkTotal);
+
+        pos += chunkTotal;
+    }
+
+    if (! found)
+        return true; // nothing to remove
+
+    // Patch RIFF size
+    auto* outBytes = static_cast<char*> (output.getData());
+    uint32_t riffSize = (uint32_t) (output.getSize() - 8);
+    outBytes[4] = (char) (riffSize & 0xFF);
+    outBytes[5] = (char) ((riffSize >> 8) & 0xFF);
+    outBytes[6] = (char) ((riffSize >> 16) & 0xFF);
+    outBytes[7] = (char) ((riffSize >> 24) & 0xFF);
+
+    return wavFile.replaceWithData (output.getData(), output.getSize());
+}
+
+bool writeIxmlChunk (const juce::File& wavFile, const juce::MemoryBlock& chunkData)
+{
+    return writeChunk (wavFile, "iXML", chunkData);
 }
 
 } // namespace WavChunkCopier

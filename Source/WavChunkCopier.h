@@ -4,8 +4,11 @@
 
 namespace WavChunkCopier
 {
-    /** Reads the iXML chunk data from a WAV file.
-        Returns true if found, with chunkData populated (raw iXML content, excluding header). */
+    /** Reads a named RIFF chunk from a WAV file.
+        Returns true if found, with chunkData populated (raw content, excluding 8-byte header). */
+    bool readChunk (const juce::File& wavFile, const char* chunkId, juce::MemoryBlock& chunkData);
+
+    /** Reads the iXML chunk data from a WAV file. Convenience wrapper around readChunk. */
     bool readIxmlChunk (const juce::File& wavFile, juce::MemoryBlock& chunkData);
 
     /** Parses iXML data and returns track names indexed by channel (1-based).
@@ -24,9 +27,14 @@ namespace WavChunkCopier
     /** Reads the bit depth from a WAV file's fmt chunk. Returns 0 on failure. */
     int readWavBitDepth (const juce::File& wavFile);
 
-    /** Appends an iXML chunk to a WAV file. The file must be a valid RIFF/WAVE.
-        Updates the RIFF size header to account for the new chunk.
-        If an iXML chunk already exists, does nothing and returns true.
-        Returns true on success. */
+    /** Writes a named RIFF chunk to a WAV file, replacing any existing chunk with the same ID.
+        Updates the RIFF size header. Returns true on success. */
+    bool writeChunk (const juce::File& wavFile, const char* chunkId, const juce::MemoryBlock& chunkData);
+
+    /** Removes a named RIFF chunk from a WAV file if present.
+        Updates the RIFF size header. Returns true on success (including if chunk was not found). */
+    bool removeChunk (const juce::File& wavFile, const char* chunkId);
+
+    /** Convenience wrappers for iXML chunks. */
     bool writeIxmlChunk (const juce::File& wavFile, const juce::MemoryBlock& chunkData);
 }

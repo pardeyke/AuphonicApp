@@ -117,7 +117,7 @@ private:
     juce::Label suffixLabel { {}, "Suffix:" };
     juce::TextEditor suffixEditor;
     juce::ToggleButton writeXmlToggle       { "Write settings JSON alongside output" };
-    juce::ToggleButton keepTimecodeToggle   { "Keep timecode (iXML)" };
+    juce::ToggleButton keepTimecodeToggle   { "Keep WAV metadata (Timecode, Notes, etc.)" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ManualOptionsComponent)
 };

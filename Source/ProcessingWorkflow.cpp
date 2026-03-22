@@ -537,6 +537,16 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
                     DBG ("Warning: failed to update iXML content");
                 }
             }
+
+            juce::MemoryBlock bextData;
+            if (WavChunkCopier::readChunk (originalSourceFile, "bext", bextData))
+            {
+                if (! WavChunkCopier::writeChunk (outputFile, "bext", bextData))
+                    DBG ("Warning: failed to write bext chunk to output file");
+            }
+
+            // Remove the LIST/INFO chunk that Auphonic adds (duplicates bext metadata)
+            WavChunkCopier::removeChunk (outputFile, "LIST");
         }
 
         if (writeSettingsXml)
