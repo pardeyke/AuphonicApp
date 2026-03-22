@@ -826,7 +826,7 @@ void ManualOptionsComponent::applyWidgetState (const juce::var& state)
     updateDependentVisibility();
 }
 
-void ManualOptionsComponent::setFileChannelCount (int numChannels)
+void ManualOptionsComponent::setFileChannelCount (int numChannels, const juce::StringArray& trackNames)
 {
     currentFileChannels = numChannels;
     int previousId = channelCombo.getSelectedId();
@@ -838,13 +838,17 @@ void ManualOptionsComponent::setFileChannelCount (int numChannels)
 
     if (show)
     {
-
         channelCombo.addItem ("All Channels", 1);
         for (int ch = 1; ch <= numChannels; ++ch)
         {
             juce::String name = "Channel " + juce::String (ch);
-            if (numChannels == 2)
+
+            // Use iXML track name if available (trackNames is 1-indexed, index 0 unused)
+            if (ch < trackNames.size() && trackNames[ch].isNotEmpty())
+                name += " (" + trackNames[ch] + ")";
+            else if (numChannels == 2)
                 name += (ch == 1 ? " (Left)" : " (Right)");
+
             channelCombo.addItem (name, ch + 1); // id 2 = ch 1, id 3 = ch 2, etc.
         }
 

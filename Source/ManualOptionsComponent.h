@@ -19,7 +19,7 @@ public:
 
     void applyApiSettings (const juce::var& algorithms);
 
-    void setFileChannelCount (int numChannels);
+    void setFileChannelCount (int numChannels, const juce::StringArray& trackNames = {});
     int getSelectedChannel() const;
 
     bool shouldAvoidOverwrite() const  { return avoidOverwriteToggle.getToggleState(); }

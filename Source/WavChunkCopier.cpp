@@ -45,6 +45,19 @@ static bool findChunk (juce::InputStream& stream, const char* targetTag, juce::M
     return false;
 }
 
+// ── Helper: set or create a child element's text ──
+
+static void setChildText (juce::XmlElement* parent, const juce::String& tagName, const juce::String& value)
+{
+    if (auto* child = parent->getChildByName (tagName))
+    {
+        child->deleteAllChildElements();
+        child->addTextElement (value);
+    }
+}
+
+// ── Public API ──
+
 bool readIxmlChunk (const juce::File& wavFile, juce::MemoryBlock& chunkData)
 {
     juce::FileInputStream stream (wavFile);
@@ -55,6 +68,142 @@ bool readIxmlChunk (const juce::File& wavFile, juce::MemoryBlock& chunkData)
         return false;
 
     return findChunk (stream, "iXML", &chunkData);
+}
+
+juce::StringArray readIxmlTrackNames (const juce::File& wavFile)
+{
+    juce::MemoryBlock ixmlData;
+    if (! readIxmlChunk (wavFile, ixmlData))
+        return {};
+
+    auto xmlText = juce::String::fromUTF8 (static_cast<const char*> (ixmlData.getData()),
+                                            (int) ixmlData.getSize());
+    auto xml = juce::XmlDocument::parse (xmlText);
+    if (xml == nullptr)
+        return {};
+
+    auto* trackList = xml->getChildByName ("TRACK_LIST");
+    if (trackList == nullptr)
+        return {};
+
+    // Find the maximum channel index to size the array
+    int maxChannel = 0;
+    for (auto* track = trackList->getChildByName ("TRACK"); track != nullptr;
+         track = track->getNextElementWithTagName ("TRACK"))
+    {
+        int idx = track->getChildElementAllSubText ("CHANNEL_INDEX", "0").getIntValue();
+        if (idx > maxChannel)
+            maxChannel = idx;
+    }
+
+    if (maxChannel == 0)
+        return {};
+
+    // Index 0 unused, indices 1..maxChannel hold track names
+    juce::StringArray names;
+    for (int i = 0; i <= maxChannel; ++i)
+        names.add ({});
+
+    for (auto* track = trackList->getChildByName ("TRACK"); track != nullptr;
+         track = track->getNextElementWithTagName ("TRACK"))
+    {
+        int idx = track->getChildElementAllSubText ("CHANNEL_INDEX", "0").getIntValue();
+        auto name = track->getChildElementAllSubText ("NAME", "").trim();
+        if (idx >= 1 && idx <= maxChannel)
+            names.set (idx, name);
+    }
+
+    return names;
+}
+
+juce::MemoryBlock updateIxmlForOutput (const juce::MemoryBlock& ixmlData,
+                                        int outputBitDepth,
+                                        int extractedChannel)
+{
+    auto xmlText = juce::String::fromUTF8 (static_cast<const char*> (ixmlData.getData()),
+                                            (int) ixmlData.getSize());
+    auto xml = juce::XmlDocument::parse (xmlText);
+    if (xml == nullptr)
+        return {};
+
+    // Update AUDIO_BIT_DEPTH in SPEED element
+    if (auto* speed = xml->getChildByName ("SPEED"))
+    {
+        if (outputBitDepth > 0)
+            setChildText (speed, "AUDIO_BIT_DEPTH", juce::String (outputBitDepth));
+    }
+
+    // Update TRACK_LIST if a single channel was extracted
+    if (extractedChannel > 0)
+    {
+        if (auto* trackList = xml->getChildByName ("TRACK_LIST"))
+        {
+            // Find the track matching the extracted channel and copy its name
+            // before deleting (to avoid use-after-free)
+            juce::String matchedTrackName;
+            bool foundMatch = false;
+            for (auto* track = trackList->getChildByName ("TRACK"); track != nullptr;
+                 track = track->getNextElementWithTagName ("TRACK"))
+            {
+                int idx = track->getChildElementAllSubText ("CHANNEL_INDEX", "0").getIntValue();
+                if (idx == extractedChannel)
+                {
+                    matchedTrackName = track->getChildElementAllSubText ("NAME", "");
+                    foundMatch = true;
+                    break;
+                }
+            }
+
+            // Now safe to delete all TRACK children
+            trackList->deleteAllChildElementsWithTagName ("TRACK");
+
+            setChildText (trackList, "TRACK_COUNT", "1");
+
+            if (foundMatch)
+            {
+                auto newTrack = std::make_unique<juce::XmlElement> ("TRACK");
+
+                auto addChild = [&] (const juce::String& tag, const juce::String& val) {
+                    auto* el = newTrack->createNewChildElement (tag);
+                    el->addTextElement (val);
+                };
+
+                addChild ("CHANNEL_INDEX", "1");
+                addChild ("INTERLEAVE_INDEX", "1");
+
+                if (matchedTrackName.isNotEmpty())
+                    addChild ("NAME", matchedTrackName);
+
+                trackList->addChildElement (newTrack.release());
+            }
+        }
+    }
+
+    auto updatedText = xml->toString();
+    auto utf8 = updatedText.toUTF8();
+    return juce::MemoryBlock (utf8.getAddress(), utf8.sizeInBytes() - 1); // exclude null terminator
+}
+
+int readWavBitDepth (const juce::File& wavFile)
+{
+    juce::FileInputStream stream (wavFile);
+    if (! stream.openedOk())
+        return 0;
+
+    if (! isRiffWave (stream))
+        return 0;
+
+    // Find the "fmt " chunk
+    juce::MemoryBlock fmtData;
+    if (! findChunk (stream, "fmt ", &fmtData))
+        return 0;
+
+    if (fmtData.getSize() < 16)
+        return 0;
+
+    // Bits per sample is at offset 14 in the fmt chunk (2 bytes, little-endian)
+    auto* bytes = static_cast<const uint8_t*> (fmtData.getData());
+    return (int) bytes[14] | ((int) bytes[15] << 8);
 }
 
 bool writeIxmlChunk (const juce::File& wavFile, const juce::MemoryBlock& chunkData)
@@ -102,8 +251,7 @@ bool writeIxmlChunk (const juce::File& wavFile, const juce::MemoryBlock& chunkDa
     auto newFileSize = wavFile.getSize();
     uint32_t riffSize = (uint32_t) (newFileSize - 8);
 
-    // Read entire file, patch the size, write back — safest approach
-    // (JUCE FileOutputStream truncates on open, so we can't just seek + write)
+    // Read entire file, patch the size, write back
     juce::MemoryBlock fileData;
     if (! wavFile.loadFileAsData (fileData))
         return false;

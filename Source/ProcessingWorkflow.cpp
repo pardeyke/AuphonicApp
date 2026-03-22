@@ -524,8 +524,18 @@ void ProcessingWorkflow::stepSave (const juce::File& tempFile)
             juce::MemoryBlock ixmlData;
             if (WavChunkCopier::readIxmlChunk (originalSourceFile, ixmlData))
             {
-                if (! WavChunkCopier::writeIxmlChunk (outputFile, ixmlData))
-                    DBG ("Warning: failed to write iXML chunk to output file");
+                int outputBitDepth = WavChunkCopier::readWavBitDepth (outputFile);
+                auto updatedIxml = WavChunkCopier::updateIxmlForOutput (ixmlData, outputBitDepth, extractChannel);
+
+                if (updatedIxml.getSize() > 0)
+                {
+                    if (! WavChunkCopier::writeIxmlChunk (outputFile, updatedIxml))
+                        DBG ("Warning: failed to write iXML chunk to output file");
+                }
+                else
+                {
+                    DBG ("Warning: failed to update iXML content");
+                }
             }
         }
 

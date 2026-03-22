@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 #include "SettingsComponent.h"
 #include "DesktopNotification.h"
+#include "WavChunkCopier.h"
 
 MainComponent::MainComponent (const juce::File& initialFile)
 {
@@ -39,7 +40,8 @@ MainComponent::MainComponent (const juce::File& initialFile)
             creditsComponent.setFile (files[0]);
             previewDurationComponent.setFileDuration (creditsComponent.getFileDurationSeconds());
             creditsComponent.setPreviewDurationSeconds (previewDurationComponent.getPreviewDurationSeconds());
-            manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
+            auto trackNames = WavChunkCopier::readIxmlTrackNames (files[0]);
+            manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels(), trackNames);
         }
         else
         {
@@ -50,7 +52,8 @@ MainComponent::MainComponent (const juce::File& initialFile)
             {
                 // Use first file for channel count info
                 creditsComponent.setFile (files[0]);
-                manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels());
+                auto trackNames = WavChunkCopier::readIxmlTrackNames (files[0]);
+                manualOptionsComponent.setFileChannelCount (creditsComponent.getFileChannels(), trackNames);
                 creditsComponent.setFiles (files); // re-set to show batch info
             }
         }
