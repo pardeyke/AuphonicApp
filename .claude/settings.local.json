@@ -22,7 +22,15 @@
       "Bash(curl:*)",
       "Bash(./Packaging/build.sh)",
       "Bash(timeout 3 ./build/AuphonicApp_artefacts/Release/AuphonicApp.app/Contents/MacOS/AuphonicApp)",
-      "Bash(gtimeout 3 ./build/AuphonicApp_artefacts/Release/AuphonicApp.app/Contents/MacOS/AuphonicApp)"
+      "Bash(gtimeout 3 ./build/AuphonicApp_artefacts/Release/AuphonicApp.app/Contents/MacOS/AuphonicApp)",
+      "Bash(xcodebuild -scheme AuphonicApp -configuration Debug build)",
+      "Read(//Applications/**)",
+      "Bash(mdfind \"kMDItemCFBundleIdentifier == ''com.apple.dt.Xcode''\")",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme AuphonicApp -configuration Debug build)",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme AuphonicApp -configuration Debug -showBuildSettings)",
+      "Bash(swiftc -typecheck /Users/aloysius/Projects/AuphonicApp/AuphonicApp/AuphonicApp/Services/AudioPlayerService.swift)",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project /Users/aloysius/Projects/AuphonicApp/AuphonicApp/AuphonicApp.xcodeproj -scheme AuphonicApp -configuration Debug build)",
+      "Bash(xcodebuild -project AuphonicApp.xcodeproj -scheme AuphonicApp -configuration Debug build)"
     ]
   }
 }
