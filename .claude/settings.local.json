@@ -30,7 +30,8 @@
       "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme AuphonicApp -configuration Debug -showBuildSettings)",
       "Bash(swiftc -typecheck /Users/aloysius/Projects/AuphonicApp/AuphonicApp/AuphonicApp/Services/AudioPlayerService.swift)",
       "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project /Users/aloysius/Projects/AuphonicApp/AuphonicApp/AuphonicApp.xcodeproj -scheme AuphonicApp -configuration Debug build)",
-      "Bash(xcodebuild -project AuphonicApp.xcodeproj -scheme AuphonicApp -configuration Debug build)"
+      "Bash(xcodebuild -project AuphonicApp.xcodeproj -scheme AuphonicApp -configuration Debug build)",
+      "Bash(xcodebuild test:*)"
     ]
   }
 }

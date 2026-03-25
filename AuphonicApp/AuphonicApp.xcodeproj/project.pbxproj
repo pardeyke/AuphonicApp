@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		F1AABB012F71000000AABB01 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F148A8632F70702A0087E8B7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F148A86A2F70702A0087E8B7;
+			remoteInfo = AuphonicApp;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		F148A86B2F70702A0087E8B7 /* AuphonicApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuphonicApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1AABB002F71000000AABB00 /* AuphonicAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AuphonicAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = AuphonicApp;
 			sourceTree = "<group>";
 		};
+		F1AABB032F71000000AABB03 /* AuphonicAppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AuphonicAppTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		F148A8682F70702A0087E8B7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F1AABB042F71000000AABB04 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				F148A86D2F70702A0087E8B7 /* AuphonicApp */,
+				F1AABB032F71000000AABB03 /* AuphonicAppTests */,
 				F148A86C2F70702A0087E8B7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				F148A86B2F70702A0087E8B7 /* AuphonicApp.app */,
+				F1AABB002F71000000AABB00 /* AuphonicAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = F148A86B2F70702A0087E8B7 /* AuphonicApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F1AABB052F71000000AABB05 /* AuphonicAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F1AABB0A2F71000000AABB0A /* Build configuration list for PBXNativeTarget "AuphonicAppTests" */;
+			buildPhases = (
+				F1AABB062F71000000AABB06 /* Sources */,
+				F1AABB042F71000000AABB04 /* Frameworks */,
+				F1AABB072F71000000AABB07 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F1AABB022F71000000AABB02 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				F1AABB032F71000000AABB03 /* AuphonicAppTests */,
+			);
+			name = AuphonicAppTests;
+			packageProductDependencies = (
+			);
+			productName = AuphonicAppTests;
+			productReference = F1AABB002F71000000AABB00 /* AuphonicAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					F148A86A2F70702A0087E8B7 = {
 						CreatedOnToolsVersion = 26.3;
+					};
+					F1AABB052F71000000AABB05 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = F148A86A2F70702A0087E8B7;
 					};
 				};
 			};
@@ -100,12 +152,20 @@
 			projectRoot = "";
 			targets = (
 				F148A86A2F70702A0087E8B7 /* AuphonicApp */,
+				F1AABB052F71000000AABB05 /* AuphonicAppTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		F148A8692F70702A0087E8B7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F1AABB072F71000000AABB07 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +182,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F1AABB062F71000000AABB06 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F1AABB022F71000000AABB02 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F148A86A2F70702A0087E8B7 /* AuphonicApp */;
+			targetProxy = F1AABB012F71000000AABB01 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		F148A8742F70702B0087E8B7 /* Debug */ = {
@@ -311,6 +386,48 @@
 			};
 			name = Release;
 		};
+		F1AABB082F71000000AABB08 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G87X787LQ9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kpgbr.AuphonicAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AuphonicApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AuphonicApp";
+			};
+			name = Debug;
+		};
+		F1AABB092F71000000AABB09 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G87X787LQ9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kpgbr.AuphonicAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AuphonicApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AuphonicApp";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -328,6 +445,15 @@
 			buildConfigurations = (
 				F148A8772F70702B0087E8B7 /* Debug */,
 				F148A8782F70702B0087E8B7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F1AABB0A2F71000000AABB0A /* Build configuration list for PBXNativeTarget "AuphonicAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F1AABB082F71000000AABB08 /* Debug */,
+				F1AABB092F71000000AABB09 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
