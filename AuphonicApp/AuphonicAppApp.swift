@@ -1,20 +1,11 @@
 import SwiftUI
 
-struct ShowSettingsKey: FocusedValueKey {
-    typealias Value = Binding<Bool>
-}
-
-extension FocusedValues {
-    var showSettings: Binding<Bool>? {
-        get { self[ShowSettingsKey.self] }
-        set { self[ShowSettingsKey.self] = newValue }
-    }
+extension Notification.Name {
+    static let openSettings = Notification.Name("openSettings")
 }
 
 @main
 struct AuphonicAppApp: App {
-    @FocusedValue(\.showSettings) private var showSettings
-
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -24,7 +15,7 @@ struct AuphonicAppApp: App {
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Settings") {
-                    showSettings?.wrappedValue = true
+                    NotificationCenter.default.post(name: .openSettings, object: nil)
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }

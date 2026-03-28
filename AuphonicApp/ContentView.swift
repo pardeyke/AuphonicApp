@@ -178,7 +178,9 @@ struct ContentView: View {
             focused = false
             await viewModel.connectAndFetch()
         }
-        .focusedValue(\.showSettings, $viewModel.showingSettings)
+        .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
+            viewModel.showingSettings = true
+        }
         .onAppear {
             NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 // Space bar, not in a text field
