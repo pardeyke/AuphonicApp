@@ -27,30 +27,27 @@ struct CreditsView: View {
                                     .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
                             )
 
+                        // Green fill (always visible when credits exist)
+                        if totalCredits > 0 {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.green.opacity(0.6), Color.green.opacity(0.5)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: barWidth)
+                        }
+
                         if cost > 0 && totalCredits > 0 {
-                            // Remaining portion (green/teal, fills from left)
-                            let remainFraction = max(0, min(1, remaining / totalCredits))
                             let costFraction = min(1, cost / totalCredits)
 
-                            // Remaining fill
-                            if remainFraction > 0 {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [Color.green.opacity(0.6), Color.green.opacity(0.5)],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .frame(width: barWidth)
-                            }
-
-                            // Cost portion (from right side of remaining)
+                            // Cost portion (from right side)
                             let costWidth = costFraction * barWidth
                             HStack(spacing: 0) {
                                 Spacer(minLength: 0)
                                 if exceedsCredits {
-                                    // Overflows: show full bar red
                                     RoundedRectangle(cornerRadius: 3)
                                         .fill(
                                             LinearGradient(

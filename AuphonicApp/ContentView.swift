@@ -36,46 +36,18 @@ struct ContentView: View {
                     .padding(.top, 4)
             }
 
-            // Preset selector
-            PresetListView(
-                presets: viewModel.presets,
-                selectedUuid: $viewModel.selectedPresetUuid,
-                isModified: $viewModel.presetModified,
-                onSavePreset: { viewModel.showingSavePreset = true }
-            )
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .onChange(of: viewModel.selectedPresetUuid) { _, newValue in
-                Task { await viewModel.loadPresetDetails(uuid: newValue) }
-                viewModel.saveCurrentConfig()
-            }
-
             // Mode toggle
-            HStack(spacing: 8) {
-                Button(viewModel.perChannelMode ? "All Channels" : "All Channels") {
-                    viewModel.setProcessingMode(false)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(!viewModel.perChannelMode ? Color.accentColor.opacity(0.3) : Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-
-                Button("Per Channel") {
-                    viewModel.setProcessingMode(true)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(viewModel.perChannelMode ? Color.accentColor.opacity(0.3) : Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .disabled(viewModel.fileChannelCount < 2)
-
-                Spacer()
+            Picker("", selection: Binding(
+                get: { viewModel.perChannelMode },
+                set: { viewModel.setProcessingMode($0) }
+            )) {
+                Text("All Channels").tag(false)
+                Text("Per Channel").tag(true)
             }
-            .font(.system(size: 12))
+            .pickerStyle(.segmented)
+            .disabled(viewModel.fileChannelCount < 2)
             .padding(.horizontal, 12)
-            .padding(.top, 4)
+            .padding(.top, 8)
 
             // Main options area
             if viewModel.perChannelMode {
@@ -90,6 +62,19 @@ struct ContentView: View {
                 .padding(.top, 4)
             } else {
                 ScrollView {
+                    PresetListView(
+                        presets: viewModel.presets,
+                        selectedUuid: $viewModel.selectedPresetUuid,
+                        isModified: $viewModel.presetModified,
+                        onSavePreset: { viewModel.showingSavePreset = true }
+                    )
+                    .padding(.horizontal, 4)
+                    .padding(.top, 4)
+                    .onChange(of: viewModel.selectedPresetUuid) { _, newValue in
+                        Task { await viewModel.loadPresetDetails(uuid: newValue) }
+                        viewModel.saveCurrentConfig()
+                    }
+
                     ManualOptionsView(
                         options: viewModel.manualOptions,
                         onChange: {
@@ -105,31 +90,38 @@ struct ContentView: View {
 
             Spacer(minLength: 4)
 
-            // Credits + Process button
-            HStack(spacing: 12) {
-                CreditsView(
-                    credits: viewModel.credits,
-                    fileDurations: viewModel.calculateFileDurations(),
-                    previewDuration: viewModel.previewDuration,
-                    channelMultiplier: viewModel.channelMultiplier
-                )
-
-                if viewModel.isProcessing {
-                    Button("Cancel") {
-                        viewModel.cancelProcessing()
-                    }
-                    .controlSize(.large)
-                } else {
-                    Button("Process") {
-                        viewModel.startProcessing()
-                    }
-                    .controlSize(.large)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(viewModel.files.isEmpty)
-                }
-            }
+            // Credits
+            CreditsView(
+                credits: viewModel.credits,
+                fileDurations: viewModel.calculateFileDurations(),
+                previewDuration: viewModel.previewDuration,
+                channelMultiplier: viewModel.channelMultiplier
+            )
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.top, 6)
+
+            // Process button
+            if viewModel.isProcessing {
+                Button("Cancel") {
+                    viewModel.cancelProcessing()
+                }
+                .controlSize(.extraLarge)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+            } else {
+                Button("Process") {
+                    viewModel.startProcessing()
+                }
+                .controlSize(.extraLarge)
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(viewModel.files.isEmpty)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+            }
 
             // Status bar
             StatusView(

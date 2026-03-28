@@ -15,20 +15,15 @@ struct PresetListView: View {
                     Text(preset.name).tag(preset.uuid)
                 }
             }
-            .labelsHidden()
             .onChange(of: selectedUuid) {
                 isModified = false
             }
 
-            if isModified {
-                Text("(modified)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Button("Save Preset") {
+            Button("Store") {
                 onSavePreset()
             }
+
+            Spacer()
         }
     }
 
