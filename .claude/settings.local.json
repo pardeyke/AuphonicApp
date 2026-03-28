@@ -36,7 +36,8 @@
       "Bash(rmdir AuphonicApp/AuphonicApp)",
       "Bash(rm AuphonicApp/AuphonicApp/.DS_Store)",
       "Bash(rmdir AuphonicApp)",
-      "Bash(rm AuphonicApp/.DS_Store)"
+      "Bash(rm AuphonicApp/.DS_Store)",
+      "Bash(xcode-select:*)"
     ]
   }
 }
