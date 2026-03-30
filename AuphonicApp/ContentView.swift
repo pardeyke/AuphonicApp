@@ -30,7 +30,7 @@ struct ContentView: View {
             }
 
             // Main options area
-            if viewModel.fileChannelCount <= 1 {
+            if viewModel.fileChannelCount <= 2 {
                 // Mono file (or no file): simple preset + options
                 ScrollView {
                     PresetListView(

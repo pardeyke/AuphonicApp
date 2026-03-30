@@ -51,7 +51,7 @@ final class AppViewModel {
     }
 
     var previewDuration: Double {
-        if fileChannelCount <= 1 {
+        if fileChannelCount <= 2 {
             return manualOptions.effectivePreviewDuration
         }
         if channelConfig.isWholeFileMode {
@@ -146,7 +146,7 @@ final class AppViewModel {
             manualOptions.fileDuration = fileDuration
 
             // Configure channel config for multi-channel files
-            if fileChannelCount >= 2 {
+            if fileChannelCount >= 3 {
                 channelConfig.configure(
                     count: fileChannelCount,
                     trackNames: trackNames,
@@ -184,7 +184,7 @@ final class AppViewModel {
 
         guard panel.runModal() == .OK, let outputDir = panel.url else { return }
 
-        if fileChannelCount <= 1 {
+        if fileChannelCount <= 2 {
             startMonoProcessing(file: file, outputDir: outputDir)
         } else {
             startChannelProcessing(file: file, outputDir: outputDir)
@@ -325,7 +325,7 @@ final class AppViewModel {
             if let algorithms = details["algorithms"] as? [String: Any] {
                 await MainActor.run {
                     // Apply to the active options state
-                    if fileChannelCount <= 1 {
+                    if fileChannelCount <= 2 {
                         manualOptions.applyApiSettings(algorithms)
                         presetModified = false
                     } else {
@@ -341,7 +341,7 @@ final class AppViewModel {
 
     func savePreset(name: String) async {
         let settings: [String: Any]
-        if fileChannelCount <= 1 {
+        if fileChannelCount <= 2 {
             settings = manualOptions.getSettings()
         } else {
             settings = channelConfig.sharedOptions.getSettings()
@@ -351,7 +351,7 @@ final class AppViewModel {
             let uuid = try await apiClient.savePreset(name: name, settings: settings)
             presets = try await apiClient.fetchPresets()
             await MainActor.run {
-                if fileChannelCount <= 1 {
+                if fileChannelCount <= 2 {
                     selectedPresetUuid = uuid
                     presetModified = false
                 } else {
@@ -395,7 +395,7 @@ final class AppViewModel {
     // MARK: - Computed
 
     var apiCallCount: Int {
-        if fileChannelCount <= 1 { return 1 }
+        if fileChannelCount <= 2 { return 1 }
         return channelConfig.apiCallCount
     }
 }
