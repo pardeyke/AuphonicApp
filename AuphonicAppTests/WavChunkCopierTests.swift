@@ -230,7 +230,7 @@ struct WavChunkCopierTests {
     @Test func updateIxmlBitDepth() {
         let ixml = "<BWFXML><AUDIO_BIT_DEPTH>24</AUDIO_BIT_DEPTH></BWFXML>"
         let data = Data(ixml.utf8)
-        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 16, extractedChannel: 0)
+        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 16, extractedChannels: [])
         let str = String(data: updated, encoding: .utf8)!
         #expect(str.contains("<AUDIO_BIT_DEPTH>16</AUDIO_BIT_DEPTH>"))
     }
@@ -249,7 +249,7 @@ struct WavChunkCopierTests {
         </BWFXML>
         """
         let data = Data(ixml.utf8)
-        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannel: 2)
+        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannels: [2])
         let str = String(data: updated, encoding: .utf8)!
         #expect(str.contains("<CHANNEL_COUNT>1</CHANNEL_COUNT>"))
         #expect(str.contains("<TRACK_COUNT>1</TRACK_COUNT>"))
@@ -263,7 +263,7 @@ struct WavChunkCopierTests {
         </BWFXML>
         """
         let data = Data(ixml.utf8)
-        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannel: -1)
+        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannels: [1, 2])
         let str = String(data: updated, encoding: .utf8)!
         #expect(str.contains("<CHANNEL_COUNT>2</CHANNEL_COUNT>"))
         #expect(str.contains("<TRACK_COUNT>2</TRACK_COUNT>"))
@@ -272,7 +272,7 @@ struct WavChunkCopierTests {
     @Test func updateIxmlNoExtraction() {
         let ixml = "<BWFXML><CHANNEL_COUNT>2</CHANNEL_COUNT></BWFXML>"
         let data = Data(ixml.utf8)
-        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannel: 0)
+        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannels: [])
         let str = String(data: updated, encoding: .utf8)!
         // Channel count should not change
         #expect(str.contains("<CHANNEL_COUNT>2</CHANNEL_COUNT>"))

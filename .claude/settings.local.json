@@ -37,7 +37,9 @@
       "Bash(rm AuphonicApp/AuphonicApp/.DS_Store)",
       "Bash(rmdir AuphonicApp)",
       "Bash(rm AuphonicApp/.DS_Store)",
-      "Bash(xcode-select:*)"
+      "Bash(xcode-select:*)",
+      "Bash(xcodebuild -project AuphonicApp.xcodeproj -scheme AuphonicApp build)",
+      "Bash(xcodebuild -project AuphonicApp.xcodeproj -scheme AuphonicApp test)"
     ]
   }
 }

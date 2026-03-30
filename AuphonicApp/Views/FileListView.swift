@@ -11,7 +11,7 @@ private struct AudioFileInfo {
 
 struct FileListView: View {
     @Binding var files: [URL]
-    var fileStatuses: [Int: String]
+    @Binding var selectedIndex: Int?
     var isEnabled: Bool
 
     @State private var isDropTargeted = false
@@ -61,9 +61,10 @@ struct FileListView: View {
     }
 
     private var fileList: some View {
-        List {
-            ForEach(Array(files.enumerated()), id: \.element) { index, file in
+        List(selection: $selectedIndex) {
+            ForEach(Array(files.enumerated()), id: \.offset) { index, file in
                 fileRow(file: file, index: index)
+                    .tag(index)
                     .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                     .listRowSeparator(.visible)
             }
@@ -91,12 +92,6 @@ struct FileListView: View {
             }
             .buttonStyle(.plain)
             .disabled(!isEnabled)
-
-            if files.count > 1 {
-                Text("\(files.count) files")
-                    .foregroundStyle(.tertiary)
-                    .font(.caption)
-            }
 
             Spacer()
 
@@ -135,12 +130,7 @@ struct FileListView: View {
 
             Spacer()
 
-            if let status = fileStatuses[index], !status.isEmpty {
-                Text(status)
-                    .font(.system(size: 11))
-                    .foregroundStyle(status.hasPrefix("Error") ? .red : .secondary)
-                    .lineLimit(1)
-            } else if let info = fileInfo[file] {
+            if let info = fileInfo[file] {
                 Text("\(info.channels)ch")
                     .font(infoFont)
                     .foregroundStyle(.secondary)

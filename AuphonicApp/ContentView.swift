@@ -9,7 +9,7 @@ struct ContentView: View {
             // File list
             FileListView(
                 files: $viewModel.files,
-                fileStatuses: viewModel.batchWorkflow?.fileStatuses ?? [:],
+                selectedIndex: $viewModel.selectedFileIndex,
                 isEnabled: !viewModel.isProcessing
             )
             .padding(.horizontal, 12)
@@ -18,49 +18,20 @@ struct ContentView: View {
                 viewModel.updateFileInfo()
                 viewModel.saveCurrentConfig()
             }
-
-            // Channel warning
-            if !viewModel.channelWarning.isEmpty {
-                Text(viewModel.channelWarning)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 2)
+            .onChange(of: viewModel.selectedFileIndex) {
+                viewModel.selectFile(at: viewModel.selectedFileIndex ?? -1)
             }
 
-            // Audio player (single file only)
-            if viewModel.files.count == 1 {
+            // Audio player (when a file is selected)
+            if viewModel.selectedFile != nil {
                 AudioPlayerView(player: viewModel.audioPlayer)
                     .padding(.horizontal, 12)
                     .padding(.top, 4)
             }
 
-            // Mode toggle
-            Picker("", selection: Binding(
-                get: { viewModel.perChannelMode },
-                set: { viewModel.setProcessingMode($0) }
-            )) {
-                Text("All Channels").tag(false)
-                Text("Per Channel").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .disabled(viewModel.fileChannelCount < 2)
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-
             // Main options area
-            if viewModel.perChannelMode {
-                ChannelTabsView(
-                    state: viewModel.channelTabs,
-                    onChange: {
-                        viewModel.presetModified = true
-                        viewModel.saveCurrentConfig()
-                    }
-                )
-                .padding(.horizontal, 12)
-                .padding(.top, 4)
-            } else {
+            if viewModel.fileChannelCount <= 1 {
+                // Mono file (or no file): simple preset + options
                 ScrollView {
                     PresetListView(
                         presets: viewModel.presets,
@@ -86,6 +57,21 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
+            } else {
+                // Multi-channel file: unified channel config
+                ChannelConfigView(
+                    config: viewModel.channelConfig,
+                    presets: viewModel.presets,
+                    onChange: {
+                        viewModel.channelConfig.presetModified = true
+                        viewModel.saveCurrentConfig()
+                    },
+                    onSavePreset: { viewModel.showingSavePreset = true }
+                )
+                .onChange(of: viewModel.channelConfig.selectedPresetUuid) { _, newValue in
+                    Task { await viewModel.loadPresetDetails(uuid: newValue) }
+                    viewModel.saveCurrentConfig()
+                }
             }
 
             Spacer(minLength: 4)
@@ -93,9 +79,9 @@ struct ContentView: View {
             // Credits
             CreditsView(
                 credits: viewModel.credits,
-                fileDurations: viewModel.calculateFileDurations(),
+                fileDuration: viewModel.fileDuration,
                 previewDuration: viewModel.previewDuration,
-                channelMultiplier: viewModel.channelMultiplier
+                apiCallCount: viewModel.apiCallCount
             )
             .padding(.horizontal, 12)
             .padding(.top, 6)
@@ -117,7 +103,7 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(viewModel.files.isEmpty)
+                .disabled(viewModel.selectedFile == nil)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)

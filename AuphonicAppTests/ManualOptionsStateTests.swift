@@ -19,7 +19,6 @@ struct ManualOptionsStateTests {
         #expect(!opts.keepTimecode)
         #expect(!opts.previewEnabled)
         #expect(opts.previewDuration == 60)
-        #expect(opts.selectedChannel == 0)
     }
 
     // MARK: - hasAnyEnabled
@@ -61,25 +60,7 @@ struct ManualOptionsStateTests {
         let opts = ManualOptionsState()
         opts.previewEnabled = true
         opts.previewDuration = 30
-        opts.fileCount = 1
         #expect(opts.effectivePreviewDuration == 30)
-    }
-
-    @Test func effectivePreviewDurationDisabledForMultipleFiles() {
-        let opts = ManualOptionsState()
-        opts.previewEnabled = true
-        opts.previewDuration = 30
-        opts.fileCount = 3
-        #expect(opts.effectivePreviewDuration == 0)
-    }
-
-    @Test func effectivePreviewDurationDisabledForPerChannel() {
-        let opts = ManualOptionsState()
-        opts.previewEnabled = true
-        opts.previewDuration = 30
-        opts.fileCount = 1
-        opts.isPerChannelMode = true
-        #expect(opts.effectivePreviewDuration == 0)
     }
 
     // MARK: - getSettings (Leveler)

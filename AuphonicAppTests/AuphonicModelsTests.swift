@@ -132,25 +132,3 @@ struct AuphonicPresetTests {
     }
 }
 
-// MARK: - FileResult Tests
-
-struct FileResultTests {
-
-    @Test func uniqueIds() {
-        let a = FileResult(inputFile: URL(fileURLWithPath: "/a.wav"), success: true)
-        let b = FileResult(inputFile: URL(fileURLWithPath: "/b.wav"), success: true)
-        #expect(a.id != b.id)
-    }
-
-    @Test func defaultValues() {
-        var result = FileResult(inputFile: URL(fileURLWithPath: "/a.wav"), success: false)
-        #expect(result.outputFile == nil)
-        #expect(result.errorMessage == nil)
-        #expect(!result.success)
-
-        result.success = true
-        result.outputFile = URL(fileURLWithPath: "/out.wav")
-        #expect(result.success)
-        #expect(result.outputFile != nil)
-    }
-}

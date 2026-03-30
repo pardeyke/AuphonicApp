@@ -226,7 +226,9 @@ enum WavChunkCopier {
 
     // MARK: - iXML Update
 
-    static func updateIxmlForOutput(ixmlData: Data, outputBitDepth: Int, extractedChannel: Int) -> Data {
+    /// Update iXML metadata for output file.
+    /// `extractedChannels` contains 1-based channel indices that were extracted (empty = all channels kept).
+    static func updateIxmlForOutput(ixmlData: Data, outputBitDepth: Int, extractedChannels: [Int]) -> Data {
         guard var xmlString = String(data: ixmlData, encoding: .utf8) else { return ixmlData }
 
         // Update bit depth
@@ -234,16 +236,11 @@ enum WavChunkCopier {
             xmlString.replaceSubrange(range, with: "<AUDIO_BIT_DEPTH>\(outputBitDepth)</AUDIO_BIT_DEPTH>")
         }
 
-        if extractedChannel > 0 {
-            // Single channel extracted — update counts and keep only that track
-            updateIxmlTag(&xmlString, tag: "CHANNEL_COUNT", value: "1")
-            updateIxmlTag(&xmlString, tag: "TRACK_COUNT", value: "1")
-            filterIxmlTracks(&xmlString, keepInterleaveIndices: [extractedChannel])
-        } else if extractedChannel == -1 {
-            // L+R (first two channels)
-            updateIxmlTag(&xmlString, tag: "CHANNEL_COUNT", value: "2")
-            updateIxmlTag(&xmlString, tag: "TRACK_COUNT", value: "2")
-            filterIxmlTracks(&xmlString, keepInterleaveIndices: [1, 2])
+        if !extractedChannels.isEmpty {
+            let count = extractedChannels.count
+            updateIxmlTag(&xmlString, tag: "CHANNEL_COUNT", value: "\(count)")
+            updateIxmlTag(&xmlString, tag: "TRACK_COUNT", value: "\(count)")
+            filterIxmlTracks(&xmlString, keepInterleaveIndices: Set(extractedChannels))
         }
 
         return xmlString.data(using: .utf8) ?? ixmlData
@@ -322,7 +319,11 @@ enum WavChunkCopier {
 
     // MARK: - Channel Merge
 
-    static func mergeChannels(original: URL, output: URL, processedChannels: [Int: URL]) -> Bool {
+    /// Merge processed channel files back into a multichannel output.
+    /// `processedSlots` maps 0-based output channel positions to processed files.
+    /// - Mono slots: `([2], url)` — mono file goes to channel 2
+    /// - Stereo slots: `([0, 1], url)` — stereo file ch0→pos 0, ch1→pos 1
+    static func mergeChannels(original: URL, output: URL, processedSlots: [(channelIndices: [Int], file: URL)]) -> Bool {
         guard let originalFile = try? AVAudioFile(forReading: original) else { return false }
 
         let format = originalFile.processingFormat
@@ -338,18 +339,32 @@ enum WavChunkCopier {
             try originalFile.read(into: originalBuffer)
         } catch { return false }
 
-        // Read processed channel files
-        var processedBuffers: [Int: AVAudioPCMBuffer] = [:]
-        for (ch, url) in processedChannels {
-            guard let file = try? AVAudioFile(forReading: url),
+        // Read processed slot files into buffers
+        struct SlotBuffer {
+            let channelIndices: [Int]  // 0-based output positions
+            let buffer: AVAudioPCMBuffer
+        }
+        var slotBuffers: [SlotBuffer] = []
+        for slot in processedSlots {
+            guard let file = try? AVAudioFile(forReading: slot.file),
                   let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else {
                 continue
             }
             file.framePosition = 0
             do {
                 try file.read(into: buffer)
-                processedBuffers[ch] = buffer
+                slotBuffers.append(SlotBuffer(channelIndices: slot.channelIndices, buffer: buffer))
             } catch { continue }
+        }
+
+        // Build a map: output channel position → (buffer, source channel in buffer)
+        var channelMap: [Int: (buffer: AVAudioPCMBuffer, sourceChannel: Int)] = [:]
+        for slot in slotBuffers {
+            for (srcCh, outCh) in slot.channelIndices.enumerated() {
+                if outCh >= 0 && outCh < channelCount && srcCh < Int(slot.buffer.format.channelCount) {
+                    channelMap[outCh] = (slot.buffer, srcCh)
+                }
+            }
         }
 
         // Create output format (interleaved for WAV writing)
@@ -372,11 +387,11 @@ enum WavChunkCopier {
 
         // Copy channels: use processed if available, else original
         for ch in 0..<channelCount {
-            if let processedBuf = processedBuffers[ch],
-               let processedData = processedBuf.floatChannelData {
-                let count = min(Int(frameCount), Int(processedBuf.frameLength))
+            if let mapping = channelMap[ch],
+               let processedData = mapping.buffer.floatChannelData {
+                let count = min(Int(frameCount), Int(mapping.buffer.frameLength))
                 for i in 0..<count {
-                    outData[ch][i] = processedData[0][i] // mono processed → channel
+                    outData[ch][i] = processedData[mapping.sourceChannel][i]
                 }
                 // Fill remaining with silence
                 for i in count..<Int(frameCount) {

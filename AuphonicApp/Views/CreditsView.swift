@@ -2,15 +2,15 @@ import SwiftUI
 
 struct CreditsView: View {
     var credits: UserCredits?
-    var fileDurations: [Double]     // per-file durations in seconds
-    var previewDuration: Double     // 0 = full
-    var channelMultiplier: Int      // for per-channel mode
+    var fileDuration: Double         // selected file duration in seconds
+    var previewDuration: Double      // 0 = full
+    var apiCallCount: Int            // number of API calls
 
     var body: some View {
         VStack(spacing: 3) {
             if let credits = credits {
                 let totalCredits = credits.displayCredits * 3600
-                let cost = fileDurations.isEmpty ? 0.0 : estimatedCost
+                let cost = fileDuration > 0 ? estimatedCost : 0.0
                 let remaining = totalCredits - cost
 
                 // Bar
@@ -114,7 +114,7 @@ struct CreditsView: View {
                 .frame(height: 22)
 
                 if cost > 0 && hasMinimumApplied {
-                    Text("Auphonic bills a 3 minute minimum per file")
+                    Text("Auphonic bills a 3 minute minimum per API call")
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -126,19 +126,15 @@ struct CreditsView: View {
     private static let minimumBilledSeconds: Double = 180
 
     private var estimatedCost: Double {
-        let multiplier = Double(max(1, channelMultiplier))
-        return fileDurations.reduce(0.0) { total, duration in
-            let effective = previewDuration > 0 ? min(previewDuration, duration) : duration
-            let billed = max(effective, Self.minimumBilledSeconds)
-            return total + billed * multiplier
-        }
+        let calls = Double(max(1, apiCallCount))
+        let effective = previewDuration > 0 ? min(previewDuration, fileDuration) : fileDuration
+        let billed = max(effective, Self.minimumBilledSeconds)
+        return billed * calls
     }
 
     private var hasMinimumApplied: Bool {
-        fileDurations.contains { duration in
-            let effective = previewDuration > 0 ? min(previewDuration, duration) : duration
-            return effective < Self.minimumBilledSeconds
-        }
+        let effective = previewDuration > 0 ? min(previewDuration, fileDuration) : fileDuration
+        return effective < Self.minimumBilledSeconds
     }
 
     private var exceedsCredits: Bool {

@@ -69,21 +69,3 @@ enum ProcessingState: Equatable {
     }
 }
 
-struct FileResult: Identifiable {
-    let id = UUID()
-    let inputFile: URL
-    var outputFile: URL?
-    var success: Bool
-    var errorMessage: String?
-}
-
-struct ChannelJob {
-    let channel: Int           // 1-based
-    let presetUuid: String
-    let settings: [String: Any]
-}
-
-struct PerChannelFileJob {
-    let inputFile: URL
-    let channels: [ChannelJob]
-}

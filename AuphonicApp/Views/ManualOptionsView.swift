@@ -43,11 +43,6 @@ final class ManualOptionsState {
     var outputFormat: OutputFormat = .keep
     var bitrate = 112
 
-    // Channel Selection
-    var selectedChannel = 0         // 0=all, -1=L+R, 1-N=single
-    var channelCount = 0
-    var trackNames: [String] = []
-
     // Output Behavior
     var avoidOverwrite = true
     var outputSuffix = "_auphonic"
@@ -58,15 +53,13 @@ final class ManualOptionsState {
     var previewEnabled = false
     var previewDuration: Double = 60    // seconds
     var fileDuration: Double = 0        // seconds, set from outside
-    var fileCount: Int = 1              // set from outside
 
-    // Per-channel mode
-    var isPerChannelMode = false
+    // Forced output format (set when merge requires WAV)
     var forcedOutputFormat: String?
 
     /// Effective preview duration for processing (0 = full)
     var effectivePreviewDuration: Double {
-        guard previewEnabled, fileCount <= 1, !isPerChannelMode else { return 0 }
+        guard previewEnabled else { return 0 }
         return previewDuration
     }
 
@@ -211,7 +204,6 @@ final class ManualOptionsState {
             "outputSuffix": outputSuffix,
             "writeSettingsXml": writeSettingsXml,
             "keepTimecode": keepTimecode,
-            "selectedChannel": selectedChannel,
             "previewEnabled": previewEnabled,
             "previewDuration": previewDuration,
         ]
@@ -253,7 +245,6 @@ final class ManualOptionsState {
         outputSuffix = (state["outputSuffix"] as? String) ?? "_auphonic"
         writeSettingsXml = (state["writeSettingsXml"] as? Bool) ?? false
         keepTimecode = (state["keepTimecode"] as? Bool) ?? false
-        selectedChannel = (state["selectedChannel"] as? Int) ?? 0
         previewEnabled = (state["previewEnabled"] as? Bool) ?? false
         previewDuration = (state["previewDuration"] as? Double) ?? 60
     }
@@ -630,31 +621,7 @@ struct ManualOptionsView: View {
                 }
             }
 
-            if !options.isPerChannelMode && options.channelCount > 1 {
-                HStack {
-                    Text("Channel")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .frame(width: 110, alignment: .leading)
-                    Picker("", selection: $options.selectedChannel) {
-                        Text("1+2 Channels").tag(-1)
-                        ForEach(1...options.channelCount, id: \.self) { ch in
-                            let name = ch <= options.trackNames.count ? options.trackNames[ch - 1] : ""
-                            if name.isEmpty {
-                                Text("Channel \(ch)").tag(ch)
-                            } else {
-                                Text("Ch \(ch) (\(name))").tag(ch)
-                            }
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: lowerPickerWidth)
-                }
-            }
-
-            if options.fileDuration > 30 && options.fileCount <= 1 && !options.isPerChannelMode {
+            if options.fileDuration > 30 {
                 HStack {
                     Toggle("Preview", isOn: $options.previewEnabled)
                         .font(.system(size: 12))

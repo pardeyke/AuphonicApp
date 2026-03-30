@@ -10,30 +10,30 @@ final class AppViewModel {
 
     // State
     var files: [URL] = []
+    var selectedFileIndex: Int?
     var presets: [AuphonicPreset] = []
     var credits: UserCredits?
-    var selectedPresetUuid = ""
-    var presetModified = false
-    var previewDuration: Double { manualOptions.effectivePreviewDuration }
-    var perChannelMode = false
     var showingSettings = false
     var showingSavePreset = false
     var savePresetName = ""
     var alertMessage = ""
     var showingAlert = false
-    var channelWarning = ""
 
-    // Manual options (whole-file mode)
+    // Manual options (mono file mode)
     let manualOptions = ManualOptionsState()
 
-    // Channel tabs (per-channel mode)
-    let channelTabs = ChannelTabsState()
+    // Channel config (multi-channel mode)
+    let channelConfig = ChannelConfig()
+
+    // Preset state (for mono mode)
+    var selectedPresetUuid = ""
+    var presetModified = false
 
     // Processing
-    private(set) var batchWorkflow: BatchWorkflow?
-    var isProcessing: Bool { batchWorkflow?.isRunning ?? false }
+    private var workflow: ProcessingWorkflow?
+    var isProcessing: Bool { workflow?.state.isActive ?? false }
 
-    // File info
+    // File info (for selected file)
     var fileChannelCount = 0
     var fileDuration: Double = 0
     var trackNames: [String] = []
@@ -45,9 +45,23 @@ final class AppViewModel {
     var outputFile: URL?
     var outputDirectory: URL?
 
+    var selectedFile: URL? {
+        guard let idx = selectedFileIndex, idx >= 0, idx < files.count else { return nil }
+        return files[idx]
+    }
+
+    var previewDuration: Double {
+        if fileChannelCount <= 1 {
+            return manualOptions.effectivePreviewDuration
+        }
+        if channelConfig.isWholeFileMode {
+            return channelConfig.sharedOptions.effectivePreviewDuration
+        }
+        return 0
+    }
+
     init() {
         apiClient.token = settingsManager.apiToken
-        perChannelMode = settingsManager.perChannelMode
         restoreLastConfig()
     }
 
@@ -76,14 +90,43 @@ final class AppViewModel {
     // MARK: - Files
 
     func updateFileInfo() {
-        guard let file = files.first else {
+        // Reset processing state when files change
+        statusText = "Ready"
+        progress = -1
+        outputFile = nil
+        outputDirectory = nil
+        audioPlayer.clearProcessed()
+
+        // Auto-select first file if nothing selected
+        if selectedFileIndex == nil && !files.isEmpty {
+            selectedFileIndex = 0
+        }
+
+        // Clamp selection to valid range
+        if let idx = selectedFileIndex {
+            if files.isEmpty {
+                selectedFileIndex = nil
+            } else if idx >= files.count {
+                selectedFileIndex = files.count - 1
+            }
+        }
+
+        loadSelectedFile()
+    }
+
+    func selectFile(at index: Int) {
+        guard index >= 0, index < files.count else { return }
+        selectedFileIndex = index
+        loadSelectedFile()
+    }
+
+    private func loadSelectedFile() {
+        guard let file = selectedFile else {
             fileChannelCount = 0
             fileDuration = 0
             trackNames = []
             fileBitDepth = 0
-            channelWarning = ""
             manualOptions.fileDuration = 0
-            manualOptions.fileCount = 0
             audioPlayer.stop()
             return
         }
@@ -100,70 +143,30 @@ final class AppViewModel {
                 trackNames.removeFirst()
             }
 
-            manualOptions.channelCount = fileChannelCount
-            manualOptions.trackNames = trackNames
             manualOptions.fileDuration = fileDuration
-            manualOptions.fileCount = files.count
 
-            // Channel warning for 3+ channels
-            if fileChannelCount >= 3 {
-                channelWarning = "Multi-channel file (\(fileChannelCount)ch): Auphonic only support mono/stereo processing. Use Per Channel mode or select 1+2 / individual channels."
-                // Default to L+R for 3+ channel files
-                if manualOptions.selectedChannel == 0 {
-                    manualOptions.selectedChannel = -1
-                }
-            } else {
-                channelWarning = ""
+            // Configure channel config for multi-channel files
+            if fileChannelCount >= 2 {
+                channelConfig.configure(
+                    count: fileChannelCount,
+                    trackNames: trackNames,
+                    bitDepth: fileBitDepth > 0 ? fileBitDepth : 24
+                )
+                channelConfig.sharedOptions.fileDuration = fileDuration
             }
 
-            // Load into audio player (single file only)
-            if files.count == 1 {
-                audioPlayer.loadOriginal(url: file)
-            } else {
-                audioPlayer.stop()
-            }
-
-            // Update channel tabs if in per-channel mode
-            if perChannelMode {
-                channelTabs.setChannels(count: fileChannelCount, trackNames: trackNames, bitDepth: fileBitDepth > 0 ? fileBitDepth : 24)
-            }
+            audioPlayer.loadOriginal(url: file)
         } catch {
             fileChannelCount = 0
             fileDuration = 0
         }
     }
 
-    func calculateTotalDuration() -> Double {
-        if files.count <= 1 { return fileDuration }
-        return calculateFileDurations().reduce(0, +)
-    }
-
-    func calculateFileDurations() -> [Double] {
-        if files.count <= 1 { return fileDuration > 0 ? [fileDuration] : [] }
-        return files.compactMap { url -> Double? in
-            guard let file = try? AVAudioFile(forReading: url) else { return nil }
-            return Double(file.length) / file.processingFormat.sampleRate
-        }
-    }
-
-    // MARK: - Processing Mode
-
-    func setProcessingMode(_ isPerChannel: Bool) {
-        perChannelMode = isPerChannel
-        settingsManager.perChannelMode = isPerChannel
-
-        manualOptions.isPerChannelMode = isPerChannel
-        if isPerChannel && fileChannelCount > 0 {
-            channelTabs.setChannels(count: fileChannelCount, trackNames: trackNames, bitDepth: fileBitDepth > 0 ? fileBitDepth : 24)
-        }
-    }
-
     // MARK: - Process
 
     func startProcessing() {
-        // Validation
-        guard !files.isEmpty else {
-            showAlert("Please select audio files first.")
+        guard let file = selectedFile else {
+            showAlert("Please select an audio file first.")
             return
         }
         guard settingsManager.hasApiToken else {
@@ -176,19 +179,19 @@ final class AppViewModel {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose output folder for processed files"
+        panel.message = "Choose output folder for processed file"
         panel.prompt = "Select"
 
         guard panel.runModal() == .OK, let outputDir = panel.url else { return }
 
-        if perChannelMode {
-            startPerChannelProcessing(outputDir: outputDir)
+        if fileChannelCount <= 1 {
+            startMonoProcessing(file: file, outputDir: outputDir)
         } else {
-            startWholeFileProcessing(outputDir: outputDir)
+            startChannelProcessing(file: file, outputDir: outputDir)
         }
     }
 
-    private func startWholeFileProcessing(outputDir: URL) {
+    private func startMonoProcessing(file: URL, outputDir: URL) {
         let effectivePresetUuid = presetModified ? "" : selectedPresetUuid
         let settings = manualOptions.getSettings()
 
@@ -202,110 +205,103 @@ final class AppViewModel {
         outputFile = nil
         outputDirectory = nil
 
-        let workflow = BatchWorkflow(apiClient: apiClient)
-        batchWorkflow = workflow
+        let wf = ProcessingWorkflow(apiClient: apiClient)
+        wf.setOutputDirectory(outputDir)
+        workflow = wf
 
-        workflow.start(
-            files: files,
+        wf.start(
+            inputFile: file,
             presetUuid: effectivePresetUuid,
             manualSettings: settings,
             avoidOverwrite: manualOptions.avoidOverwrite,
             outputSuffix: manualOptions.outputSuffix,
             writeSettingsXml: manualOptions.writeSettingsXml,
-            channelToExtract: manualOptions.selectedChannel,
             previewDuration: previewDuration,
-            keepTimecode: manualOptions.keepTimecode,
-            outputDirectory: outputDir
+            keepTimecode: manualOptions.keepTimecode
         )
 
-        monitorBatchWorkflow(workflow)
+        monitorWorkflow(wf)
     }
 
-    private func startPerChannelProcessing(outputDir: URL) {
-        guard channelTabs.hasAnyChannelEnabled else {
-            showAlert("Please enable processing options for at least one channel.")
+    private func startChannelProcessing(file: URL, outputDir: URL) {
+        let jobs = channelConfig.processingJobs
+
+        guard !jobs.isEmpty else {
+            showAlert("Please enable at least one channel for processing.")
             return
         }
 
-        // Verify all files have same channel count
-        if files.count > 1 {
-            for file in files {
-                guard let audioFile = try? AVAudioFile(forReading: file) else { continue }
-                if Int(audioFile.processingFormat.channelCount) != fileChannelCount {
-                    showAlert("All files must have the same channel count for per-channel mode.")
-                    return
-                }
+        // For channel processing, use the first job (single-file, no batch)
+        let job = jobs.first!
+        let settings = channelConfig.settingsForJob(job)
+        let presetUuid = channelConfig.presetUuidForJob(job)
+
+        // Validate settings
+        if channelConfig.isWholeFileMode {
+            guard !presetUuid.isEmpty || channelConfig.sharedOptions.hasAnyEnabled() else {
+                showAlert("Please select a preset or enable processing options.")
+                return
+            }
+        } else {
+            let hasSettings: Bool
+            if channelConfig.linkedSettings {
+                let pUuid = channelConfig.presetModified ? "" : channelConfig.selectedPresetUuid
+                hasSettings = !pUuid.isEmpty || channelConfig.sharedOptions.hasAnyEnabled()
+            } else {
+                hasSettings = channelConfig.optionsForJob(job).hasAnyEnabled()
+            }
+            guard hasSettings else {
+                showAlert("Please select a preset or enable processing options.")
+                return
             }
         }
 
-        statusText = "Starting per-channel processing..."
+        statusText = "Starting..."
         progress = 0
         outputFile = nil
         outputDirectory = nil
 
-        let channelSettings = channelTabs.getEnabledChannelSettings()
-        let fileJobs = files.map { file in
-            PerChannelFileJob(
-                inputFile: file,
-                channels: channelSettings.map { cs in
-                    ChannelJob(channel: cs.channel, presetUuid: cs.presetUuid, settings: cs.settings)
-                }
-            )
-        }
+        let wf = ProcessingWorkflow(apiClient: apiClient)
+        wf.setOutputDirectory(outputDir)
+        workflow = wf
 
-        let workflow = BatchWorkflow(apiClient: apiClient)
-        batchWorkflow = workflow
-
-        workflow.startPerChannel(
-            fileJobs: fileJobs,
-            avoidOverwrite: channelTabs.avoidOverwrite,
-            outputSuffix: channelTabs.outputSuffix,
-            writeSettingsXml: channelTabs.writeSettingsXml,
-            outputDirectory: outputDir
+        wf.start(
+            inputFile: file,
+            presetUuid: presetUuid,
+            manualSettings: settings,
+            avoidOverwrite: channelConfig.avoidOverwrite,
+            outputSuffix: channelConfig.outputSuffix,
+            writeSettingsXml: channelConfig.writeSettingsXml,
+            channelsToExtract: job.channelIndices,
+            previewDuration: previewDuration,
+            keepTimecode: channelConfig.keepTimecode
         )
 
-        monitorBatchWorkflow(workflow)
+        monitorWorkflow(wf)
     }
 
-    private func monitorBatchWorkflow(_ workflow: BatchWorkflow) {
+    private func monitorWorkflow(_ wf: ProcessingWorkflow) {
         Task { @MainActor in
-            while workflow.isRunning {
-                statusText = workflow.overallStatus.isEmpty ? "Processing..." : workflow.overallStatus
-
-                // Combine completed files + current file's progress
-                let total = Double(max(1, workflow.totalCount))
-                let completedFraction = Double(workflow.completedCount) / total
-
-                // Find the best per-file progress from active workflows
-                var currentFileProgress = 0.0
-                for wf in workflow.workflows where wf.state.isActive {
-                    currentFileProgress = max(currentFileProgress, wf.progress)
-                }
-                progress = completedFraction + (currentFileProgress / total)
-
+            while wf.state.isActive {
+                statusText = wf.statusText.isEmpty ? "Processing..." : wf.statusText
+                progress = wf.progress
                 try? await Task.sleep(for: .milliseconds(250))
             }
 
             // Completion
-            statusText = workflow.overallStatus
+            statusText = wf.statusText
             progress = -1
 
-            let successCount = workflow.results.filter(\.success).count
-            let failCount = workflow.results.count - successCount
-
-            if let output = workflow.lastOutputFile {
+            if let output = wf.lastOutputFile {
                 outputFile = output
                 outputDirectory = output.deletingLastPathComponent()
-
-                // Load processed file for A/B playback
-                if files.count == 1 {
-                    audioPlayer.loadProcessed(url: output)
-                }
+                audioPlayer.loadProcessed(url: output)
             }
 
             // Desktop notification
-            let title = failCount > 0 ? "Processing Complete (with errors)" : "Processing Complete"
-            let body = "\(successCount) file\(successCount == 1 ? "" : "s") processed successfully"
+            let success = wf.state == .done
+            let title = success ? "Processing Complete" : "Processing Failed"
+            let body = success ? "File processed successfully" : wf.statusText
             NotificationService.show(title: title, body: body)
 
             // Refresh credits
@@ -314,7 +310,7 @@ final class AppViewModel {
     }
 
     func cancelProcessing() {
-        batchWorkflow?.cancel()
+        workflow?.cancel()
         statusText = "Cancelled"
         progress = -1
     }
@@ -328,8 +324,14 @@ final class AppViewModel {
             let details = try await apiClient.fetchPresetDetails(uuid: uuid)
             if let algorithms = details["algorithms"] as? [String: Any] {
                 await MainActor.run {
-                    manualOptions.applyApiSettings(algorithms)
-                    presetModified = false
+                    // Apply to the active options state
+                    if fileChannelCount <= 1 {
+                        manualOptions.applyApiSettings(algorithms)
+                        presetModified = false
+                    } else {
+                        channelConfig.sharedOptions.applyApiSettings(algorithms)
+                        channelConfig.presetModified = false
+                    }
                 }
             }
         } catch {
@@ -338,13 +340,24 @@ final class AppViewModel {
     }
 
     func savePreset(name: String) async {
-        let settings = manualOptions.getSettings()
+        let settings: [String: Any]
+        if fileChannelCount <= 1 {
+            settings = manualOptions.getSettings()
+        } else {
+            settings = channelConfig.sharedOptions.getSettings()
+        }
+
         do {
             let uuid = try await apiClient.savePreset(name: name, settings: settings)
             presets = try await apiClient.fetchPresets()
             await MainActor.run {
-                selectedPresetUuid = uuid
-                presetModified = false
+                if fileChannelCount <= 1 {
+                    selectedPresetUuid = uuid
+                    presetModified = false
+                } else {
+                    channelConfig.selectedPresetUuid = uuid
+                    channelConfig.presetModified = false
+                }
             }
         } catch {
             showAlert("Failed to save preset: \(error.localizedDescription)")
@@ -379,9 +392,10 @@ final class AppViewModel {
         showingAlert = true
     }
 
-    // MARK: - Channel Multiplier
+    // MARK: - Computed
 
-    var channelMultiplier: Int {
-        perChannelMode ? max(1, channelTabs.enabledChannelCount) : 1
+    var apiCallCount: Int {
+        if fileChannelCount <= 1 { return 1 }
+        return channelConfig.apiCallCount
     }
 }

@@ -14,7 +14,7 @@ final class ProcessingWorkflow {
     private var productionUuid: String = ""
     private var presetId: String = ""
     private var settings: [String: Any] = [:]
-    private var extractChannel: Int = 0       // 0=all, >0=single, -1=L+R
+    private var channelsToExtract: [Int] = []  // empty=all, [N]=single (1-based), [A,B]=stereo pair
     private var previewDurationSeconds: Double = 0
     private var keepTimecode: Bool = false
     private var avoidOverwrite: Bool = false
@@ -40,7 +40,7 @@ final class ProcessingWorkflow {
         avoidOverwrite: Bool,
         outputSuffix: String,
         writeSettingsXml: Bool,
-        channelToExtract: Int = 0,
+        channelsToExtract: [Int] = [],
         previewDuration: Double = 0,
         keepTimecode: Bool = false
     ) {
@@ -51,7 +51,7 @@ final class ProcessingWorkflow {
         self.avoidOverwrite = avoidOverwrite
         self.outputSuffix = outputSuffix
         self.writeSettingsXml = writeSettingsXml
-        self.extractChannel = channelToExtract
+        self.channelsToExtract = channelsToExtract
         self.previewDurationSeconds = previewDuration
         self.keepTimecode = keepTimecode
         self.cancelled = false
@@ -66,9 +66,9 @@ final class ProcessingWorkflow {
             targetExtension = resolved.targetExtension
         }
 
-        print("[ProcessingWorkflow] start: extractChannel=\(extractChannel), previewDuration=\(previewDurationSeconds)")
+        print("[ProcessingWorkflow] start: channelsToExtract=\(channelsToExtract), previewDuration=\(previewDurationSeconds)")
 
-        if extractChannel != 0 {
+        if !channelsToExtract.isEmpty {
             progress = 0.0
             setState(.extractingChannel)
             stepExtractChannel()
@@ -131,21 +131,14 @@ final class ProcessingWorkflow {
                 }
                 try file.read(into: inputBuffer)
 
-                let outputChannels: Int
-                var channelIndicesToCopy: [Int]
+                // channelsToExtract contains 1-based indices; convert to 0-based
+                let channelIndicesToCopy = self.channelsToExtract.map { $0 - 1 }
+                let outputChannels = channelIndicesToCopy.count
 
-                if self.extractChannel == -1 {
-                    // L+R stereo
-                    outputChannels = min(2, channelCount)
-                    channelIndicesToCopy = Array(0..<outputChannels)
-                } else {
-                    // Single channel (1-based)
-                    let chIdx = self.extractChannel - 1
+                for chIdx in channelIndicesToCopy {
                     guard chIdx >= 0, chIdx < channelCount else {
-                        throw NSError(domain: "AuphonicApp", code: 2, userInfo: [NSLocalizedDescriptionKey: "Channel \(self.extractChannel) does not exist"])
+                        throw NSError(domain: "AuphonicApp", code: 2, userInfo: [NSLocalizedDescriptionKey: "Channel \(chIdx + 1) does not exist"])
                     }
-                    outputChannels = 1
-                    channelIndicesToCopy = [chIdx]
                 }
 
                 let outputSettings: [String: Any] = [
@@ -509,7 +502,7 @@ final class ProcessingWorkflow {
                             ixmlData = WavChunkCopier.updateIxmlForOutput(
                                 ixmlData: ixmlData,
                                 outputBitDepth: bitDepth > 0 ? bitDepth : 24,
-                                extractedChannel: self.extractChannel
+                                extractedChannels: self.channelsToExtract
                             )
                             _ = WavChunkCopier.writeChunk(to: finalURL, chunkId: "iXML", data: ixmlData)
                         }
