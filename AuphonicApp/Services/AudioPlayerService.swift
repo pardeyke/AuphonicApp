@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreAudio
 import AudioToolbox
+import Accelerate
 
 @Observable
 final class AudioPlayerService {
@@ -63,7 +64,6 @@ final class AudioPlayerService {
     func loadOriginal(url: URL) {
         stop()
         soloChannelA = 0
-        waveformCacheA = [:]
         do {
             let file = try AVAudioFile(forReading: url)
             audioFileA = file
@@ -83,7 +83,6 @@ final class AudioPlayerService {
 
     func loadProcessed(url: URL) {
         soloChannelB = 0
-        waveformCacheB = [:]
         do {
             let file = try AVAudioFile(forReading: url)
             audioFileB = file
@@ -477,6 +476,9 @@ final class AudioPlayerService {
 
     private var waveformGeneration: UInt64 = 0
 
+    /// In-memory cache of waveforms keyed by file URL, so switching files is instant.
+    private static var waveformDiskCache: [URL: [Int: [Float]]] = [:]
+
     /// Reads the file once on a background thread and generates waveforms for all channels + combined.
     private func generateAllWaveformsAsync(file: AVAudioFile, slot: Slot) {
         waveformGeneration += 1
@@ -484,11 +486,28 @@ final class AudioPlayerService {
         let url = file.url
         let resolution = 256
 
+        // Check cache first
+        if let cached = Self.waveformDiskCache[url] {
+            let activeChannel = slot == .original ? soloChannelA : soloChannelB
+            if slot == .original {
+                waveformCacheA = cached
+                originalWaveform = cached[activeChannel] ?? cached[0] ?? []
+            } else {
+                waveformCacheB = cached
+                processedWaveform = cached[activeChannel] ?? cached[0] ?? []
+            }
+            return
+        }
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let allWaveforms = Self.generateAllWaveforms(url: url, resolution: resolution) else { return }
 
             DispatchQueue.main.async {
                 guard let self, self.waveformGeneration == gen else { return }
+
+                // Store in persistent cache
+                Self.waveformDiskCache[url] = allWaveforms
+
                 let activeChannel = slot == .original ? self.soloChannelA : self.soloChannelB
 
                 if slot == .original {
@@ -502,48 +521,72 @@ final class AudioPlayerService {
         }
     }
 
-    /// Reads the file once and returns waveforms for channel 0 (all) and each individual channel.
+    /// Reads the file in chunks and computes peak waveforms using vDSP for speed.
     private static func generateAllWaveforms(url: URL, resolution: Int) -> [Int: [Float]]? {
         guard let file = try? AVAudioFile(forReading: url) else { return nil }
-        let frameCount = AVAudioFrameCount(file.length)
-        guard frameCount > 0,
-              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frameCount) else {
-            return nil
-        }
+        let totalFrames = Int(file.length)
+        guard totalFrames > 0 else { return nil }
 
-        file.framePosition = 0
-        do {
-            try file.read(into: buffer)
-        } catch {
-            return nil
-        }
-
-        guard let channelData = buffer.floatChannelData else { return nil }
         let fileChannels = Int(file.processingFormat.channelCount)
-        let totalFrames = Int(buffer.frameLength)
         let samplesPerBin = max(1, totalFrames / resolution)
 
-        // Build all waveforms in a single pass
+        // Prepare result arrays
         var result: [Int: [Float]] = [:]
-        // channel 0 = combined peak, 1..N = individual
         for ch in 0...fileChannels {
             result[ch] = [Float](repeating: 0, count: resolution)
         }
 
-        for bin in 0..<resolution {
-            let start = bin * samplesPerBin
-            let end = min(start + samplesPerBin, totalFrames)
-            var allMax: Float = 0
-            for chIdx in 0..<fileChannels {
-                var chMax: Float = 0
-                for frame in start..<end {
-                    let val = abs(channelData[chIdx][frame])
-                    if val > chMax { chMax = val }
-                }
-                result[chIdx + 1]![bin] = chMax
-                if chMax > allMax { allMax = chMax }
+        // Read in chunks to avoid loading entire file into memory
+        let chunkFrames = AVAudioFrameCount(min(totalFrames, 1024 * 1024))
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: chunkFrames) else {
+            return nil
+        }
+
+        file.framePosition = 0
+        var framesRead = 0
+
+        while framesRead < totalFrames {
+            let toRead = min(chunkFrames, AVAudioFrameCount(totalFrames - framesRead))
+            do {
+                try file.read(into: buffer, frameCount: toRead)
+            } catch {
+                break
             }
-            result[0]![bin] = allMax
+
+            guard let channelData = buffer.floatChannelData else { break }
+            let chunkLen = Int(buffer.frameLength)
+
+            // Process each bin that overlaps with this chunk
+            let firstBin = framesRead / samplesPerBin
+            let lastBin = min(resolution - 1, (framesRead + chunkLen - 1) / samplesPerBin)
+
+            for bin in firstBin...lastBin {
+                let binStart = bin * samplesPerBin
+                let binEnd = min(binStart + samplesPerBin, totalFrames)
+
+                // Overlap with current chunk
+                let overlapStart = max(binStart, framesRead)
+                let overlapEnd = min(binEnd, framesRead + chunkLen)
+                guard overlapEnd > overlapStart else { continue }
+
+                let localStart = overlapStart - framesRead
+                let count = overlapEnd - overlapStart
+
+                var allMax: Float = result[0]![bin]
+                for chIdx in 0..<fileChannels {
+                    // Use vDSP to find max absolute value in this range
+                    var chMax: Float = 0
+                    vDSP_maxmgv(channelData[chIdx].advanced(by: localStart), 1, &chMax, vDSP_Length(count))
+
+                    // Accumulate max across chunks for this bin
+                    let prev = result[chIdx + 1]![bin]
+                    if chMax > prev { result[chIdx + 1]![bin] = chMax }
+                    if chMax > allMax { allMax = chMax }
+                }
+                result[0]![bin] = allMax
+            }
+
+            framesRead += chunkLen
         }
 
         return result
