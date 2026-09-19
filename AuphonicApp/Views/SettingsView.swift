@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var token: String = ""
     @State private var selectedDeviceName: String = ""
     @State private var devices: [AudioPlayerService.AudioDevice] = []
+    @State private var deleteProductions = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -42,6 +43,17 @@ struct SettingsView: View {
                 .labelsHidden()
             }
 
+            // Housekeeping
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Delete productions on Auphonic after download", isOn: $deleteProductions)
+                    .font(.system(size: 12))
+
+                Text("Removes each production from your Auphonic account once its audio has been downloaded and written to the output file. Failed files keep their productions.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Spacer()
 
             HStack {
@@ -54,6 +66,7 @@ struct SettingsView: View {
                 Button("Save") {
                     settingsManager.apiToken = token
                     settingsManager.audioOutputDevice = selectedDeviceName
+                    settingsManager.deleteProductionsAfterDownload = deleteProductions
 
                     // Apply output device
                     if let device = devices.first(where: { $0.name == selectedDeviceName }) {
@@ -67,10 +80,11 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 400, height: 280)
+        .frame(width: 400, height: 340)
         .onAppear {
             token = settingsManager.apiToken
             selectedDeviceName = settingsManager.audioOutputDevice
+            deleteProductions = settingsManager.deleteProductionsAfterDownload
             devices = AudioPlayerService.availableOutputDevices()
         }
     }

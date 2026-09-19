@@ -22,6 +22,10 @@ final class AudioPlayerService {
     private(set) var originalDuration: TimeInterval = 0
     private(set) var processedDuration: TimeInterval = 0
 
+    // BWF timecode of the loaded original (samples since midnight + fps from iXML)
+    private(set) var startTimecodeSamples: UInt64?
+    private(set) var timecodeRate: Double?
+
     // Cached per-channel waveforms (key: channel index, 0=all)
     private var waveformCacheA: [Int: [Float]] = [:]
     private var waveformCacheB: [Int: [Float]] = [:]
@@ -64,6 +68,8 @@ final class AudioPlayerService {
     func loadOriginal(url: URL) {
         stop()
         soloChannelA = 0
+        startTimecodeSamples = nil
+        timecodeRate = nil
         do {
             let file = try AVAudioFile(forReading: url)
             audioFileA = file
@@ -74,7 +80,9 @@ final class AudioPlayerService {
             originalDuration = Double(file.length) / file.processingFormat.sampleRate
             duration = originalDuration
             originalWaveform = []
-            reconnectAndStart()
+            startTimecodeSamples = WavChunkCopier.readBextTimeReference(from: url)
+            timecodeRate = WavChunkCopier.readIxmlTimecodeRate(from: url)
+            ensureConnected(slot: .original, sampleRate: file.processingFormat.sampleRate)
             generateAllWaveformsAsync(file: file, slot: .original)
         } catch {
             print("Failed to load original: \(error)")
@@ -91,10 +99,36 @@ final class AudioPlayerService {
             trackNamesB = WavChunkCopier.readIxmlTrackNames(from: url)
             processedDuration = Double(file.length) / file.processingFormat.sampleRate
             processedWaveform = []
-            reconnectAndStart()
+            ensureConnected(slot: .processed, sampleRate: file.processingFormat.sampleRate)
             generateAllWaveformsAsync(file: file, slot: .processed)
         } catch {
             print("Failed to load processed: \(error)")
+        }
+    }
+
+    /// Connect the slot's player node for the given sample rate. Cheap when the
+    /// rate is unchanged (the common case when switching between takes) — the
+    /// engine is not stopped or restarted; play() starts it on demand.
+    private var connectedRateA: Double = 0
+    private var connectedRateB: Double = 0
+
+    private func ensureConnected(slot: Slot, sampleRate: Double) {
+        ensureEngineSetup()
+
+        let node = slot == .original ? playerNodeA : playerNodeB
+        let connectedRate = slot == .original ? connectedRateA : connectedRateB
+        guard connectedRate != sampleRate else { return }
+
+        // Format changes require a stopped engine; it restarts on next play()
+        if engine.isRunning { engine.stop() }
+        engine.disconnectNodeOutput(node)
+        let stereo = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        engine.connect(node, to: engine.mainMixerNode, format: stereo)
+
+        if slot == .original {
+            connectedRateA = sampleRate
+        } else {
+            connectedRateB = sampleRate
         }
     }
 
@@ -129,13 +163,17 @@ final class AudioPlayerService {
         engine.disconnectNodeOutput(playerNodeA)
         engine.disconnectNodeOutput(playerNodeB)
 
+        connectedRateA = 0
+        connectedRateB = 0
         if let file = audioFileA {
             let stereo = AVAudioFormat(standardFormatWithSampleRate: file.processingFormat.sampleRate, channels: 2)!
             engine.connect(playerNodeA, to: engine.mainMixerNode, format: stereo)
+            connectedRateA = file.processingFormat.sampleRate
         }
         if let file = audioFileB {
             let stereo = AVAudioFormat(standardFormatWithSampleRate: file.processingFormat.sampleRate, channels: 2)!
             engine.connect(playerNodeB, to: engine.mainMixerNode, format: stereo)
+            connectedRateB = file.processingFormat.sampleRate
         }
 
         engine.prepare()
@@ -472,6 +510,28 @@ final class AudioPlayerService {
         currentTime = Double(frame) / file.processingFormat.sampleRate
     }
 
+    // MARK: - Timecode
+
+    /// Absolute BWF timecode at the current playback position, as
+    /// HH:MM:SS:FF when the iXML declares a frame rate, HH:MM:SS otherwise.
+    var currentTimecodeString: String? {
+        guard let start = startTimecodeSamples, let file = audioFileA else { return nil }
+        let sampleRate = file.processingFormat.sampleRate
+        guard sampleRate > 0 else { return nil }
+
+        let totalSeconds = Double(start) / sampleRate + currentTime
+        let whole = Int(totalSeconds)
+        let h = (whole / 3600) % 24
+        let m = (whole % 3600) / 60
+        let s = whole % 60
+
+        if let rate = timecodeRate, rate > 0 {
+            let frames = min(Int(rate.rounded()) - 1, Int((totalSeconds - Double(whole)) * rate))
+            return String(format: "%02d:%02d:%02d:%02d", h, m, s, frames)
+        }
+        return String(format: "%02d:%02d:%02d", h, m, s)
+    }
+
     // MARK: - Waveform Generation
 
     private var waveformGeneration: UInt64 = 0
@@ -484,7 +544,7 @@ final class AudioPlayerService {
         waveformGeneration += 1
         let gen = waveformGeneration
         let url = file.url
-        let resolution = 256
+        let resolution = 8192   // high resolution so the view can zoom in
 
         // Check cache first
         if let cached = Self.waveformDiskCache[url] {
@@ -499,30 +559,49 @@ final class AudioPlayerService {
             return
         }
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let allWaveforms = Self.generateAllWaveforms(url: url, resolution: resolution) else { return }
+        // Applies a (partial or final) result if this scan is still current
+        let apply: ([Int: [Float]], Bool) -> Void = { [weak self] waveforms, isFinal in
+            guard let self, self.waveformGeneration == gen else { return }
 
-            DispatchQueue.main.async {
-                guard let self, self.waveformGeneration == gen else { return }
-
-                // Store in persistent cache
-                Self.waveformDiskCache[url] = allWaveforms
-
-                let activeChannel = slot == .original ? self.soloChannelA : self.soloChannelB
-
-                if slot == .original {
-                    self.waveformCacheA = allWaveforms
-                    self.originalWaveform = allWaveforms[activeChannel] ?? allWaveforms[0] ?? []
-                } else {
-                    self.waveformCacheB = allWaveforms
-                    self.processedWaveform = allWaveforms[activeChannel] ?? allWaveforms[0] ?? []
-                }
+            if isFinal {
+                Self.waveformDiskCache[url] = waveforms
             }
+
+            let activeChannel = slot == .original ? self.soloChannelA : self.soloChannelB
+
+            if slot == .original {
+                self.waveformCacheA = waveforms
+                self.originalWaveform = waveforms[activeChannel] ?? waveforms[0] ?? []
+            } else {
+                self.waveformCacheB = waveforms
+                self.processedWaveform = waveforms[activeChannel] ?? waveforms[0] ?? []
+            }
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Self.generateAllWaveforms(
+                url: url,
+                resolution: resolution,
+                isCancelled: { self == nil || self?.waveformGeneration != gen },
+                onPartial: { partial in
+                    DispatchQueue.main.async { apply(partial, false) }
+                }
+            )
+            guard let allWaveforms = result else { return }
+
+            DispatchQueue.main.async { apply(allWaveforms, true) }
         }
     }
 
     /// Reads the file in chunks and computes peak waveforms using vDSP for speed.
-    private static func generateAllWaveforms(url: URL, resolution: Int) -> [Int: [Float]]? {
+    /// Reports the bins filled so far after every chunk via `onPartial`, so the
+    /// waveform can render progressively from left to right.
+    private static func generateAllWaveforms(
+        url: URL,
+        resolution: Int,
+        isCancelled: () -> Bool = { false },
+        onPartial: (([Int: [Float]]) -> Void)? = nil
+    ) -> [Int: [Float]]? {
         guard let file = try? AVAudioFile(forReading: url) else { return nil }
         let totalFrames = Int(file.length)
         guard totalFrames > 0 else { return nil }
@@ -546,6 +625,7 @@ final class AudioPlayerService {
         var framesRead = 0
 
         while framesRead < totalFrames {
+            if isCancelled() { return nil }
             let toRead = min(chunkFrames, AVAudioFrameCount(totalFrames - framesRead))
             do {
                 try file.read(into: buffer, frameCount: toRead)
@@ -587,6 +667,11 @@ final class AudioPlayerService {
             }
 
             framesRead += chunkLen
+
+            // Publish progress after each chunk (skip when already complete)
+            if framesRead < totalFrames {
+                onPartial?(result)
+            }
         }
 
         return result

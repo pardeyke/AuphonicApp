@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 
+@MainActor
 @Observable
 final class AppViewModel {
     // Services
@@ -8,61 +9,41 @@ final class AppViewModel {
     let apiClient = AuphonicAPIClient()
     let audioPlayer = AudioPlayerService()
 
-    // State
-    var files: [URL] = []
-    var selectedFileIndex: Int?
+    // Batch state
+    private(set) var batchFiles: [BatchFile] = []
+    private(set) var groups: [FileGroup] = []
+    var selectedGroupID: UUID?
+    var selectedFileID: UUID?
+    var isLoadingFiles = false
+
+    // API state
     var presets: [AuphonicPreset] = []
     var credits: UserCredits?
+
+    // UI state
     var showingSettings = false
     var showingSavePreset = false
     var savePresetName = ""
     var alertMessage = ""
     var showingAlert = false
 
-    // Manual options (mono file mode)
-    let manualOptions = ManualOptionsState()
-
-    // Channel config (multi-channel mode)
-    let channelConfig = ChannelConfig()
-
-    // Preset state (for mono mode)
-    var selectedPresetUuid = ""
-    var presetModified = false
-
     // Processing
-    private var workflow: ProcessingWorkflow?
-    var isProcessing: Bool { workflow?.state.isActive ?? false }
+    private(set) var workflow: BatchWorkflow?
+    var isProcessing: Bool { workflow?.isRunning ?? false }
+    var statusText: String { workflow?.statusText ?? "Ready" }
+    var progress: Double { workflow?.overallProgress ?? -1 }
+    var outputDirectory: URL? { workflow?.lastOutputDirectory }
 
-    // File info (for selected file)
-    var fileChannelCount = 0
-    var fileDuration: Double = 0
-    var trackNames: [String] = []
-    var fileBitDepth = 0
-
-    // Status
-    var statusText = "Ready"
-    var progress: Double = -1
-    var outputFile: URL?
-    var outputDirectory: URL?
-
-    var selectedFile: URL? {
-        guard let idx = selectedFileIndex, idx >= 0, idx < files.count else { return nil }
-        return files[idx]
+    var selectedGroup: FileGroup? {
+        groups.first { $0.id == selectedGroupID }
     }
 
-    var previewDuration: Double {
-        if fileChannelCount <= 2 {
-            return manualOptions.effectivePreviewDuration
-        }
-        if channelConfig.isWholeFileMode {
-            return channelConfig.sharedOptions.effectivePreviewDuration
-        }
-        return 0
+    var selectedFile: BatchFile? {
+        batchFiles.first { $0.id == selectedFileID }
     }
 
     init() {
         apiClient.token = settingsManager.apiToken
-        restoreLastConfig()
     }
 
     // MARK: - Connection
@@ -89,84 +70,123 @@ final class AppViewModel {
 
     // MARK: - Files
 
-    func updateFileInfo() {
-        // Reset processing state when files change
-        statusText = "Ready"
-        progress = -1
-        outputFile = nil
-        outputDirectory = nil
-        audioPlayer.clearProcessed()
+    func addFiles(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let known = Set(batchFiles.map(\.url))
 
-        // Auto-select first file if nothing selected
-        if selectedFileIndex == nil && !files.isEmpty {
-            selectedFileIndex = 0
+        isLoadingFiles = true
+        Task {
+            // Folder expansion and metadata reads are file I/O; keep them off the main actor
+            let (attempted, loaded) = await Task.detached(priority: .userInitiated) {
+                let wavURLs = Self.collectWavURLs(from: urls).filter { !known.contains($0) }
+                return (wavURLs.count, wavURLs.compactMap { BatchFile(url: $0) })
+            }.value
+
+            batchFiles.append(contentsOf: loaded)
+            rebuildGroups()
+            isLoadingFiles = false
+
+            if loaded.count < attempted {
+                showAlert("\(attempted - loaded.count) file(s) could not be read and were skipped.")
+            }
         }
+    }
 
-        // Clamp selection to valid range
-        if let idx = selectedFileIndex {
-            if files.isEmpty {
-                selectedFileIndex = nil
-            } else if idx >= files.count {
-                selectedFileIndex = files.count - 1
+    /// Expand folders (recursively) to the WAV files they contain; plain WAV
+    /// URLs pass through. Order is stable (by path) and duplicates are removed.
+    nonisolated static func collectWavURLs(from urls: [URL]) -> [URL] {
+        var result: [URL] = []
+        var seen = Set<URL>()
+
+        func add(_ url: URL) {
+            let standardized = url.standardizedFileURL
+            if url.pathExtension.lowercased() == "wav", seen.insert(standardized).inserted {
+                result.append(standardized)
             }
         }
 
-        loadSelectedFile()
+        for url in urls {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { continue }
+
+            if isDirectory.boolValue {
+                // Keep the folder's security scope open for the app session:
+                // the contained files are read again later during processing.
+                _ = url.startAccessingSecurityScopedResource()
+                if let enumerator = FileManager.default.enumerator(
+                    at: url,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
+                ) {
+                    for case let item as URL in enumerator {
+                        add(item)
+                    }
+                }
+            } else {
+                add(url)
+            }
+        }
+
+        return result.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
-    func selectFile(at index: Int) {
-        guard index >= 0, index < files.count else { return }
-        selectedFileIndex = index
-        loadSelectedFile()
-    }
-
-    private func loadSelectedFile() {
-        guard let file = selectedFile else {
-            fileChannelCount = 0
-            fileDuration = 0
-            trackNames = []
-            fileBitDepth = 0
-            manualOptions.fileDuration = 0
+    func removeFile(_ file: BatchFile) {
+        batchFiles.removeAll { $0.id == file.id }
+        if selectedFileID == file.id {
+            selectedFileID = nil
             audioPlayer.stop()
-            return
         }
+        rebuildGroups()
+    }
 
-        do {
-            let audioFile = try AVAudioFile(forReading: file)
-            fileChannelCount = Int(audioFile.processingFormat.channelCount)
-            fileDuration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
-            trackNames = WavChunkCopier.readIxmlTrackNames(from: file)
-            fileBitDepth = WavChunkCopier.readWavBitDepth(from: file)
+    func removeGroup(_ group: FileGroup) {
+        let ids = Set(group.files.map(\.id))
+        batchFiles.removeAll { ids.contains($0.id) }
+        if let selected = selectedFileID, ids.contains(selected) {
+            selectedFileID = nil
+            audioPlayer.stop()
+        }
+        rebuildGroups()
+    }
 
-            // Remove index 0 (unused) from track names if present
-            if !trackNames.isEmpty {
-                trackNames.removeFirst()
-            }
+    func clearFiles() {
+        batchFiles.removeAll()
+        selectedFileID = nil
+        selectedGroupID = nil
+        groups = []
+        audioPlayer.stop()
+    }
 
-            manualOptions.fileDuration = fileDuration
+    private func rebuildGroups() {
+        groups = FileGrouper.makeGroups(from: batchFiles, previousGroups: groups)
 
-            // Configure channel config for multi-channel files
-            if fileChannelCount >= 3 {
-                channelConfig.configure(
-                    count: fileChannelCount,
-                    trackNames: trackNames,
-                    bitDepth: fileBitDepth > 0 ? fileBitDepth : 24
-                )
-                channelConfig.sharedOptions.fileDuration = fileDuration
-            }
+        // Keep a valid group selection
+        if selectedGroupID == nil || !groups.contains(where: { $0.id == selectedGroupID }) {
+            selectedGroupID = groups.first?.id
+        }
+    }
 
-            audioPlayer.loadOriginal(url: file)
-        } catch {
-            fileChannelCount = 0
-            fileDuration = 0
+    func selectFile(_ file: BatchFile) {
+        selectedFileID = file.id
+        if let group = groups.first(where: { g in g.files.contains { $0.id == file.id } }) {
+            selectedGroupID = group.id
+        }
+        audioPlayer.loadOriginal(url: file.url)
+
+        // Spot-checking: a processed file loads its output into the second lane for A/B
+        if case .done(let output) = file.status,
+           FileManager.default.fileExists(atPath: output.path) {
+            audioPlayer.loadProcessed(url: output)
+        } else {
+            audioPlayer.clearProcessed()
         }
     }
 
     // MARK: - Process
 
     func startProcessing() {
-        guard let file = selectedFile else {
-            showAlert("Please select an audio file first.")
+        guard !batchFiles.isEmpty else {
+            showAlert("Please add WAV files first.")
             return
         }
         guard settingsManager.hasApiToken else {
@@ -174,165 +194,124 @@ final class AppViewModel {
             return
         }
 
-        // Prompt for output folder
+        let configuredGroups = groups.filter { $0.config.hasValidJobConfiguration }
+        guard !configuredGroups.isEmpty else {
+            showAlert("Please enable at least one channel and select a preset or processing options.")
+            return
+        }
+
+        // Destination folder for the output files (originals are never modified)
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose output folder for processed file"
-        panel.prompt = "Select"
+        panel.message = "Choose the output folder (originals stay untouched; outputs keep their file names)"
+        panel.prompt = "Process"
 
-        guard panel.runModal() == .OK, let outputDir = panel.url else { return }
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
 
-        if fileChannelCount <= 2 {
-            startMonoProcessing(file: file, outputDir: outputDir)
-        } else {
-            startChannelProcessing(file: file, outputDir: outputDir)
-        }
-    }
-
-    private func startMonoProcessing(file: URL, outputDir: URL) {
-        let effectivePresetUuid = presetModified ? "" : selectedPresetUuid
-        let settings = manualOptions.getSettings()
-
-        guard !effectivePresetUuid.isEmpty || manualOptions.hasAnyEnabled() else {
-            showAlert("Please select a preset or enable processing options.")
-            return
-        }
-
-        statusText = "Starting..."
-        progress = 0
-        outputFile = nil
-        outputDirectory = nil
-
-        let wf = ProcessingWorkflow(apiClient: apiClient)
-        wf.setOutputDirectory(outputDir)
+        let wf = BatchWorkflow(apiClient: apiClient)
+        wf.deleteProductionsAfterDownload = settingsManager.deleteProductionsAfterDownload
         workflow = wf
-
-        wf.start(
-            inputFile: file,
-            presetUuid: effectivePresetUuid,
-            manualSettings: settings,
-            avoidOverwrite: manualOptions.avoidOverwrite,
-            outputSuffix: manualOptions.outputSuffix,
-            writeSettingsXml: manualOptions.writeSettingsXml,
-            previewDuration: previewDuration,
-            keepTimecode: manualOptions.keepTimecode
-        )
-
-        monitorWorkflow(wf)
-    }
-
-    private func startChannelProcessing(file: URL, outputDir: URL) {
-        let jobs = channelConfig.processingJobs
-
-        guard !jobs.isEmpty else {
-            showAlert("Please enable at least one channel for processing.")
-            return
-        }
-
-        // For channel processing, use the first job (single-file, no batch)
-        let job = jobs.first!
-        let settings = channelConfig.settingsForJob(job)
-        let presetUuid = channelConfig.presetUuidForJob(job)
-
-        // Validate settings
-        if channelConfig.isWholeFileMode {
-            guard !presetUuid.isEmpty || channelConfig.sharedOptions.hasAnyEnabled() else {
-                showAlert("Please select a preset or enable processing options.")
-                return
-            }
-        } else {
-            let hasSettings: Bool
-            if channelConfig.linkedSettings {
-                let pUuid = channelConfig.presetModified ? "" : channelConfig.selectedPresetUuid
-                hasSettings = !pUuid.isEmpty || channelConfig.sharedOptions.hasAnyEnabled()
-            } else {
-                hasSettings = channelConfig.optionsForJob(job).hasAnyEnabled()
-            }
-            guard hasSettings else {
-                showAlert("Please select a preset or enable processing options.")
-                return
-            }
-        }
-
-        statusText = "Starting..."
-        progress = 0
-        outputFile = nil
-        outputDirectory = nil
-
-        let wf = ProcessingWorkflow(apiClient: apiClient)
-        wf.setOutputDirectory(outputDir)
-        workflow = wf
-
-        wf.start(
-            inputFile: file,
-            presetUuid: presetUuid,
-            manualSettings: settings,
-            avoidOverwrite: channelConfig.avoidOverwrite,
-            outputSuffix: channelConfig.outputSuffix,
-            writeSettingsXml: channelConfig.writeSettingsXml,
-            channelsToExtract: job.channelIndices,
-            previewDuration: previewDuration,
-            keepTimecode: channelConfig.keepTimecode
-        )
-
-        monitorWorkflow(wf)
-    }
-
-    private func monitorWorkflow(_ wf: ProcessingWorkflow) {
-        Task { @MainActor in
-            while wf.state.isActive {
-                statusText = wf.statusText.isEmpty ? "Processing..." : wf.statusText
-                progress = wf.progress
-                try? await Task.sleep(for: .milliseconds(250))
-            }
-
-            // Completion
-            statusText = wf.statusText
-            progress = -1
-
-            if let output = wf.lastOutputFile {
-                outputFile = output
-                outputDirectory = output.deletingLastPathComponent()
-                audioPlayer.loadProcessed(url: output)
-            }
-
-            // Desktop notification
-            let success = wf.state == .done
-            let title = success ? "Processing Complete" : "Processing Failed"
-            let body = success ? "File processed successfully" : wf.statusText
-            NotificationService.show(title: title, body: body)
-
-            // Refresh credits
-            await refreshCredits()
+        wf.start(groups: configuredGroups, destination: destination) { [weak self] in
+            Task { await self?.refreshCredits() }
         }
     }
 
     func cancelProcessing() {
         workflow?.cancel()
-        statusText = "Cancelled"
-        progress = -1
+    }
+
+    // MARK: - Settings Test Drive
+
+    /// Process one representative take of the selected group with its current
+    /// settings into a temp folder and load the result into the player's
+    /// Processed lane for A/B comparison — before spending credits on the batch.
+    func testSettings() {
+        guard !isProcessing else { return }
+        guard settingsManager.hasApiToken else {
+            showAlert("Please enter your API token in Settings.")
+            return
+        }
+        guard let group = selectedGroup else {
+            showAlert("Select a group first.")
+            return
+        }
+        guard group.config.hasValidJobConfiguration else {
+            showAlert("Please enable at least one channel and select a preset or processing options.")
+            return
+        }
+
+        // Representative take: the selected file if it belongs to this group, else the first
+        let testFile: BatchFile
+        if let selected = selectedFile, group.files.contains(where: { $0.id == selected.id }) {
+            testFile = selected
+        } else if let first = group.files.first {
+            testFile = first
+        } else {
+            return
+        }
+
+        let testDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("auphonic_settings_test_\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
+
+        // One-file group sharing the real group's config (same instance)
+        let testGroup = FileGroup(channelCount: group.channelCount, files: [testFile], reusing: group.config)
+
+        let wf = BatchWorkflow(apiClient: apiClient)
+        wf.deleteProductionsAfterDownload = settingsManager.deleteProductionsAfterDownload
+        // Never upload more than the 3-minute billing minimum for a test
+        wf.maxUploadDuration = 180
+        workflow = wf
+        wf.start(groups: [testGroup], destination: testDir) { [weak self] in
+            guard let self else { return }
+
+            if case .done(let output) = testFile.status {
+                // The test output is temporary — don't leave the file marked as done
+                testFile.status = .pending
+                self.selectFile(testFile)
+                self.audioPlayer.loadProcessed(url: output)
+            }
+            Task { await self.refreshCredits() }
+        }
+    }
+
+    // MARK: - Credit Estimate
+
+    /// Billed seconds for the whole batch: one production per upload job,
+    /// each billed at the file duration with Auphonic's 3-minute minimum.
+    var estimatedCostSeconds: Double {
+        let minimumBilled = 180.0
+        return groups.reduce(0) { total, group in
+            guard group.config.hasValidJobConfiguration else { return total }
+            let jobCount = Double(group.config.uploadJobs.count)
+            let groupCost = group.files.reduce(0) { sum, file in
+                sum + jobCount * max(file.duration, minimumBilled)
+            }
+            return total + groupCost
+        }
+    }
+
+    /// Total number of Auphonic productions in the batch
+    var totalApiCallCount: Int {
+        groups.reduce(0) { total, group in
+            guard group.config.hasValidJobConfiguration else { return total }
+            return total + group.config.uploadJobs.count * group.files.count
+        }
     }
 
     // MARK: - Presets
 
     func loadPresetDetails(uuid: String) async {
-        guard !uuid.isEmpty else { return }
+        guard !uuid.isEmpty, let group = selectedGroup else { return }
 
         do {
             let details = try await apiClient.fetchPresetDetails(uuid: uuid)
             if let algorithms = details["algorithms"] as? [String: Any] {
-                await MainActor.run {
-                    // Apply to the active options state
-                    if fileChannelCount <= 2 {
-                        manualOptions.applyApiSettings(algorithms)
-                        presetModified = false
-                    } else {
-                        channelConfig.sharedOptions.applyApiSettings(algorithms)
-                        channelConfig.presetModified = false
-                    }
-                }
+                group.config.sharedOptions.applyApiSettings(algorithms)
+                group.config.presetModified = false
             }
         } catch {
             // Silent preset load failure
@@ -340,49 +319,17 @@ final class AppViewModel {
     }
 
     func savePreset(name: String) async {
-        let settings: [String: Any]
-        if fileChannelCount <= 2 {
-            settings = manualOptions.getSettings()
-        } else {
-            settings = channelConfig.sharedOptions.getSettings()
-        }
+        guard let group = selectedGroup else { return }
+        let settings = group.config.sharedOptions.getSettings()
 
         do {
             let uuid = try await apiClient.savePreset(name: name, settings: settings)
             presets = try await apiClient.fetchPresets()
-            await MainActor.run {
-                if fileChannelCount <= 2 {
-                    selectedPresetUuid = uuid
-                    presetModified = false
-                } else {
-                    channelConfig.selectedPresetUuid = uuid
-                    channelConfig.presetModified = false
-                }
-            }
+            group.config.selectedPresetUuid = uuid
+            group.config.presetModified = false
         } catch {
             showAlert("Failed to save preset: \(error.localizedDescription)")
         }
-    }
-
-    // MARK: - Persistence
-
-    func saveCurrentConfig() {
-        if let jsonData = try? JSONSerialization.data(withJSONObject: manualOptions.getWidgetState()),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            settingsManager.lastManualSettings = jsonString
-        }
-        settingsManager.lastPresetUuid = selectedPresetUuid
-    }
-
-    private func restoreLastConfig() {
-        let savedSettings = settingsManager.lastManualSettings
-        if !savedSettings.isEmpty,
-           let data = savedSettings.data(using: .utf8),
-           let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            manualOptions.applyWidgetState(state)
-        }
-
-        selectedPresetUuid = settingsManager.lastPresetUuid
     }
 
     // MARK: - Alert
@@ -390,12 +337,5 @@ final class AppViewModel {
     func showAlert(_ message: String) {
         alertMessage = message
         showingAlert = true
-    }
-
-    // MARK: - Computed
-
-    var apiCallCount: Int {
-        if fileChannelCount <= 2 { return 1 }
-        return channelConfig.apiCallCount
     }
 }

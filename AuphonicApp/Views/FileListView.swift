@@ -1,33 +1,24 @@
- import SwiftUI
-import AVFoundation
+import SwiftUI
 import UniformTypeIdentifiers
 
-private struct AudioFileInfo {
-    var duration: TimeInterval = 0
-    var sampleRate: Double = 0
-    var bitDepth: Int = 0
-    var channels: Int = 0
-}
-
+/// Batch file list, organized into timecode-adjacent groups of equal channel
+/// count. Selecting a row selects its group for configuration.
 struct FileListView: View {
-    @Binding var files: [URL]
-    @Binding var selectedIndex: Int?
+    var viewModel: AppViewModel
     var isEnabled: Bool
 
     @State private var isDropTargeted = false
-    @State private var fileInfo: [URL: AudioFileInfo] = [:]
 
     var body: some View {
         VStack(spacing: 0) {
-            // File list / drop zone
             Group {
-                if files.isEmpty {
+                if viewModel.batchFiles.isEmpty {
                     dropZone
                 } else {
-                    fileList
+                    groupedList
                 }
             }
-            .frame(minHeight: 60, maxHeight: 180)
+            .frame(minHeight: 100, maxHeight: 260)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
@@ -39,9 +30,6 @@ struct FileListView: View {
             }
         }
         .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
-        .onChange(of: files) { _, newFiles in
-            loadFileInfo(for: newFiles)
-        }
     }
 
     private var dropZone: some View {
@@ -49,9 +37,12 @@ struct FileListView: View {
             Image(systemName: "arrow.down.doc")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("Drop audio files here")
+            Text("Drop multichannel WAV files or folders here")
                 .foregroundStyle(.secondary)
                 .font(.caption)
+            if viewModel.isLoadingFiles {
+                ProgressView().controlSize(.small)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -60,19 +51,54 @@ struct FileListView: View {
         }
     }
 
-    private var fileList: some View {
-        List(selection: $selectedIndex) {
-            ForEach(Array(files.enumerated()), id: \.offset) { index, file in
-                fileRow(file: file, index: index)
-                    .tag(index)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-                    .listRowSeparator(.visible)
+    private var groupedList: some View {
+        List(selection: Binding(
+            get: { viewModel.selectedFileID },
+            set: { newValue in
+                if let id = newValue,
+                   let file = viewModel.batchFiles.first(where: { $0.id == id }) {
+                    viewModel.selectFile(file)
+                }
             }
-            .onDelete { offsets in
-                if isEnabled { files.remove(atOffsets: offsets) }
+        )) {
+            ForEach(viewModel.groups) { group in
+                Section {
+                    ForEach(group.files) { file in
+                        fileRow(file)
+                            .tag(file.id)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                    }
+                } header: {
+                    HStack {
+                        Text(group.title)
+                            .font(.system(size: 11, weight: .semibold))
+                        if viewModel.selectedGroupID == group.id {
+                            Text("• configuring")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        Spacer()
+                        if !group.config.hasValidJobConfiguration {
+                            Text("not configured")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
+                        }
+                        if isEnabled {
+                            Button {
+                                viewModel.removeGroup(group)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Remove this group and its files from the batch")
+                        }
+                    }
+                }
             }
 
-            addFilesRow
+            footerRow
                 .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                 .listRowSeparator(.hidden)
         }
@@ -81,7 +107,7 @@ struct FileListView: View {
         .padding(.vertical, 4)
     }
 
-    private var addFilesRow: some View {
+    private var footerRow: some View {
         HStack {
             Button {
                 openFilePicker()
@@ -93,10 +119,14 @@ struct FileListView: View {
             .buttonStyle(.plain)
             .disabled(!isEnabled)
 
+            if viewModel.isLoadingFiles {
+                ProgressView().controlSize(.small)
+            }
+
             Spacer()
 
             Button {
-                files.removeAll()
+                viewModel.clearFiles()
             } label: {
                 Text("Clear All")
                     .font(.system(size: 12))
@@ -109,48 +139,54 @@ struct FileListView: View {
 
     private let infoFont = Font.system(size: 11, design: .monospaced)
 
-    private func fileRow(file: URL, index: Int) -> some View {
+    private func fileRow(_ file: BatchFile) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "waveform")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            statusIcon(file)
 
-            Text(file.deletingPathExtension().lastPathComponent)
+            Text(file.url.deletingPathExtension().lastPathComponent)
                 .font(.system(size: 12))
                 .lineLimit(1)
                 .truncationMode(.middle)
 
-            Text(file.pathExtension.uppercased())
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(Color(nsColor: .separatorColor).opacity(0.3))
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-
             Spacer()
 
-            if let info = fileInfo[file] {
-                Text("\(info.channels)ch")
+            switch file.status {
+            case .processing(let step):
+                Text(step)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                ProgressView(value: file.progress)
+                    .frame(width: 60)
+                    .controlSize(.small)
+            case .failed(let message):
+                Text(message)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 200, alignment: .trailing)
+            default:
+                Text(file.timecodeString)
                     .font(infoFont)
                     .foregroundStyle(.secondary)
 
-                Text(formatSampleRate(info.sampleRate))
+                Text("\(file.channelCount)ch")
                     .font(infoFont)
                     .foregroundStyle(.secondary)
 
-                Text("\(info.bitDepth)bit")
+                Text("\(file.bitDepth)\(file.isFloat ? "f" : "")bit")
                     .font(infoFont)
                     .foregroundStyle(.secondary)
 
-                Text(formatDuration(info.duration))
+                Text(formatDuration(file.duration))
                     .font(infoFont)
                     .foregroundStyle(.secondary)
             }
 
             if isEnabled {
                 Button {
-                    files.remove(at: index)
+                    viewModel.removeFile(file)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12))
@@ -161,39 +197,25 @@ struct FileListView: View {
         }
     }
 
-    // MARK: - File Info
-
-    private func loadFileInfo(for urls: [URL]) {
-        for url in urls where fileInfo[url] == nil {
-            Task.detached {
-                var info = AudioFileInfo()
-
-                // Duration via AVURLAsset
-                let asset = AVURLAsset(url: url)
-                if let dur = try? await asset.load(.duration) {
-                    info.duration = CMTimeGetSeconds(dur)
-                }
-
-                // Sample rate, channels, bit depth via AVAudioFile
-                if let file = try? AVAudioFile(forReading: url) {
-                    let fmt = file.fileFormat
-                    info.sampleRate = fmt.sampleRate
-                    info.channels = Int(fmt.channelCount)
-                    if let bitDepth = fmt.settings[AVLinearPCMBitDepthKey] as? Int {
-                        info.bitDepth = bitDepth
-                    } else {
-                        // Estimate from bytes per frame for non-PCM or missing key
-                        let bitsPerChannel = fmt.streamDescription.pointee.mBitsPerChannel
-                        if bitsPerChannel > 0 {
-                            info.bitDepth = Int(bitsPerChannel)
-                        }
-                    }
-                }
-
-                await MainActor.run {
-                    fileInfo[url] = info
-                }
-            }
+    @ViewBuilder
+    private func statusIcon(_ file: BatchFile) -> some View {
+        switch file.status {
+        case .pending:
+            Image(systemName: "waveform")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        case .processing:
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
+        case .done:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case .failed:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.red)
         }
     }
 
@@ -208,60 +230,30 @@ struct FileListView: View {
         return String(format: "%d:%02d", m, s)
     }
 
-    private func formatSampleRate(_ rate: Double) -> String {
-        if rate >= 1000 {
-            let khz = rate / 1000.0
-            if khz == khz.rounded() {
-                return String(format: "%.0fkHz", khz)
-            }
-            return String(format: "%.1fkHz", khz)
-        }
-        return String(format: "%.0fHz", rate)
-    }
-
     // MARK: - File Picker
 
     private func openFilePicker() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [
-            UTType.audio,
-            UTType(filenameExtension: "wav")!,
-            UTType(filenameExtension: "aif")!,
-            UTType(filenameExtension: "aiff")!,
-            UTType(filenameExtension: "flac")!,
-            UTType(filenameExtension: "mp3")!,
-            UTType(filenameExtension: "m4a")!,
-            UTType(filenameExtension: "ogg")!,
-            UTType(filenameExtension: "opus")!,
-        ]
+        panel.canChooseDirectories = true
+        panel.allowedContentTypes = [UTType(filenameExtension: "wav")!]
 
         if panel.runModal() == .OK {
-            addFiles(panel.urls)
+            viewModel.addFiles(panel.urls)
         }
     }
 
     // MARK: - Drag & Drop
 
     private func handleDrop(_ providers: [NSItemProvider]) {
+        guard isEnabled else { return }
         for provider in providers {
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 guard let data = item as? Data,
                       let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
                 DispatchQueue.main.async {
-                    addFiles([url])
+                    viewModel.addFiles([url])
                 }
-            }
-        }
-    }
-
-    private func addFiles(_ urls: [URL]) {
-        let audioExtensions: Set<String> = ["wav", "aif", "aiff", "flac", "mp3", "m4a", "aac", "ogg", "opus", "alac"]
-        for url in urls {
-            if audioExtensions.contains(url.pathExtension.lowercased()),
-               !files.contains(url) {
-                files.append(url)
             }
         }
     }

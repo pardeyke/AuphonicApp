@@ -2,15 +2,14 @@ import SwiftUI
 
 struct CreditsView: View {
     var credits: UserCredits?
-    var fileDuration: Double         // selected file duration in seconds
-    var previewDuration: Double      // 0 = full
-    var apiCallCount: Int            // number of API calls
+    var estimatedCostSeconds: Double // billed seconds for the whole batch (incl. 3-min minimums)
+    var apiCallCount: Int            // number of Auphonic productions in the batch
 
     var body: some View {
         VStack(spacing: 3) {
             if let credits = credits {
                 let totalCredits = credits.displayCredits * 3600
-                let cost = fileDuration > 0 ? estimatedCost : 0.0
+                let cost = estimatedCostSeconds
                 let remaining = totalCredits - cost
 
                 // Bar
@@ -113,8 +112,8 @@ struct CreditsView: View {
                 }
                 .frame(height: 22)
 
-                if cost > 0 && hasMinimumApplied {
-                    Text("Auphonic bills a 3 minute minimum per API call")
+                if cost > 0 {
+                    Text("\(apiCallCount) production\(apiCallCount == 1 ? "" : "s") — Auphonic bills a 3 minute minimum each")
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,23 +122,9 @@ struct CreditsView: View {
         }
     }
 
-    private static let minimumBilledSeconds: Double = 180
-
-    private var estimatedCost: Double {
-        let calls = Double(max(1, apiCallCount))
-        let effective = previewDuration > 0 ? min(previewDuration, fileDuration) : fileDuration
-        let billed = max(effective, Self.minimumBilledSeconds)
-        return billed * calls
-    }
-
-    private var hasMinimumApplied: Bool {
-        let effective = previewDuration > 0 ? min(previewDuration, fileDuration) : fileDuration
-        return effective < Self.minimumBilledSeconds
-    }
-
     private var exceedsCredits: Bool {
         guard let credits = credits else { return false }
-        return estimatedCost > credits.displayCredits * 3600
+        return estimatedCostSeconds > credits.displayCredits * 3600
     }
 
     private func formatDuration(_ seconds: Double) -> String {

@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Configuration UI for one file group: which channels to process, how they
+/// are paired/packed into uploads, and the Auphonic settings.
 struct ChannelConfigView: View {
     @Bindable var config: ChannelConfig
     var presets: [AuphonicPreset]
@@ -8,26 +10,21 @@ struct ChannelConfigView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Stereo / Multi-Mono toggle (only for 2-channel files)
-            if config.showsModeToggle {
-                Picker("", selection: Binding(
-                    get: { config.stereoMode },
-                    set: { newValue in
-                        config.stereoMode = newValue
-                        onChange?()
-                    }
-                )) {
-                    Text("Stereo").tag(true)
-                    Text("Multi-Mono").tag(false)
-                }
-                .pickerStyle(.segmented)
+            channelListSection
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
-            }
 
-            if config.isWholeFileMode {
-                // Stereo or mono: single preset + options
-                ScrollView {
+            settingsToggles
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+
+            uploadPlanSection
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+
+            ScrollView {
+                // Preset (applies when linked)
+                if config.linkedSettings {
                     PresetListView(
                         presets: presets,
                         selectedUuid: $config.selectedPresetUuid,
@@ -36,44 +33,13 @@ struct ChannelConfigView: View {
                     )
                     .padding(.horizontal, 4)
                     .padding(.top, 4)
+                }
 
-                    ManualOptionsView(
-                        options: config.sharedOptions,
-                        onChange: onChange
-                    )
+                settingsContent
                     .padding(4)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 4)
-            } else {
-                // Multi-mono mode: channel list + settings
-                channelListSection
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-
-                settingsToggles
-                    .padding(.horizontal, 12)
-                    .padding(.top, 6)
-
-                ScrollView {
-                    // Preset (applies when linked)
-                    if config.linkedSettings {
-                        PresetListView(
-                            presets: presets,
-                            selectedUuid: $config.selectedPresetUuid,
-                            isModified: $config.presetModified,
-                            onSavePreset: { onSavePreset?() }
-                        )
-                        .padding(.horizontal, 4)
-                        .padding(.top, 4)
-                    }
-
-                    settingsContent
-                        .padding(4)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 4)
             }
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
         }
     }
 
@@ -175,34 +141,39 @@ struct ChannelConfigView: View {
             .font(.system(size: 12))
             .toggleStyle(.checkbox)
 
-            if config.mergeAvailable {
-                Toggle("Merge output", isOn: Binding(
-                    get: { config.mergeOutput },
-                    set: { newValue in
-                        config.mergeOutput = newValue
-                        // Update forced output format on channels
-                        if newValue {
-                            for ch in config.channels {
-                                let wavFormat = config.bitDepth <= 16 ? "wav-16bit" : "wav-24bit"
-                                ch.options.forcedOutputFormat = wavFormat
-                                ch.options.outputFormat = config.bitDepth <= 16 ? .wav16 : .wav24
-                            }
-                            let wavFormat = config.bitDepth <= 16 ? "wav-16bit" : "wav-24bit"
-                            config.sharedOptions.forcedOutputFormat = wavFormat
-                            config.sharedOptions.outputFormat = config.bitDepth <= 16 ? .wav16 : .wav24
-                        } else {
-                            for ch in config.channels {
-                                ch.options.forcedOutputFormat = nil
-                            }
-                            config.sharedOptions.forcedOutputFormat = nil
-                        }
-                        onChange?()
-                    }
-                ))
-                .font(.system(size: 12))
-                .toggleStyle(.checkbox)
-            }
+            Toggle("Pack mono channels into stereo uploads", isOn: Binding(
+                get: { config.packMonoChannels },
+                set: { newValue in
+                    config.packMonoChannels = newValue
+                    onChange?()
+                }
+            ))
+            .font(.system(size: 12))
+            .toggleStyle(.checkbox)
+            .help("Auphonic bills per minute regardless of channel count, so two mono channels sharing one stereo upload cost half. Disable if processing of one channel audibly affects the other.")
 
+            Toggle("Settings JSON", isOn: Binding(
+                get: { config.writeSettingsXml },
+                set: { config.writeSettingsXml = $0 }
+            ))
+            .font(.system(size: 12))
+            .toggleStyle(.checkbox)
+            .help("Write the used Auphonic settings as a JSON file next to each output")
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Upload Plan
+
+    private var uploadPlanSection: some View {
+        HStack {
+            let jobs = config.uploadJobs
+            Text(jobs.isEmpty
+                 ? "No channels selected"
+                 : "Uploads per file: " + jobs.map(\.label).joined(separator: ", "))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
             Spacer()
         }
     }

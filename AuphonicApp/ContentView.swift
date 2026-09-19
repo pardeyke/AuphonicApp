@@ -6,21 +6,13 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // File list
+            // Grouped batch file list
             FileListView(
-                files: $viewModel.files,
-                selectedIndex: $viewModel.selectedFileIndex,
+                viewModel: viewModel,
                 isEnabled: !viewModel.isProcessing
             )
             .padding(.horizontal, 12)
             .padding(.top, 8)
-            .onChange(of: viewModel.files) {
-                viewModel.updateFileInfo()
-                viewModel.saveCurrentConfig()
-            }
-            .onChange(of: viewModel.selectedFileIndex) {
-                viewModel.selectFile(at: viewModel.selectedFileIndex ?? -1)
-            }
 
             // Audio player (when a file is selected)
             if viewModel.selectedFile != nil {
@@ -29,59 +21,41 @@ struct ContentView: View {
                     .padding(.top, 4)
             }
 
-            // Main options area
-            if viewModel.fileChannelCount <= 2 {
-                // Mono file (or no file): simple preset + options
-                ScrollView {
-                    PresetListView(
-                        presets: viewModel.presets,
-                        selectedUuid: $viewModel.selectedPresetUuid,
-                        isModified: $viewModel.presetModified,
-                        onSavePreset: { viewModel.showingSavePreset = true }
-                    )
-                    .padding(.horizontal, 4)
-                    .padding(.top, 4)
-                    .onChange(of: viewModel.selectedPresetUuid) { _, newValue in
-                        Task { await viewModel.loadPresetDetails(uuid: newValue) }
-                        viewModel.saveCurrentConfig()
-                    }
-
-                    ManualOptionsView(
-                        options: viewModel.manualOptions,
-                        onChange: {
-                            viewModel.presetModified = true
-                            viewModel.saveCurrentConfig()
-                        }
-                    )
-                    .padding(4)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 4)
-            } else {
-                // Multi-channel file: unified channel config
+            // Per-group channel configuration
+            if let group = viewModel.selectedGroup {
                 ChannelConfigView(
-                    config: viewModel.channelConfig,
+                    config: group.config,
                     presets: viewModel.presets,
                     onChange: {
-                        viewModel.channelConfig.presetModified = true
-                        viewModel.saveCurrentConfig()
+                        group.config.presetModified = true
                     },
                     onSavePreset: { viewModel.showingSavePreset = true }
                 )
-                .onChange(of: viewModel.channelConfig.selectedPresetUuid) { _, newValue in
+                .id(group.id)
+                .onChange(of: group.config.selectedPresetUuid) { _, newValue in
                     Task { await viewModel.loadPresetDetails(uuid: newValue) }
-                    viewModel.saveCurrentConfig()
                 }
+            } else {
+                VStack(spacing: 6) {
+                    Spacer()
+                    Text("Add broadcast WAV files to configure channel processing")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Text("Files are grouped by timecode order and channel count; each group is configured once.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
             }
 
             Spacer(minLength: 4)
 
-            // Credits
+            // Credits with batch cost estimate
             CreditsView(
                 credits: viewModel.credits,
-                fileDuration: viewModel.fileDuration,
-                previewDuration: viewModel.previewDuration,
-                apiCallCount: viewModel.apiCallCount
+                estimatedCostSeconds: viewModel.estimatedCostSeconds,
+                apiCallCount: viewModel.totalApiCallCount
             )
             .padding(.horizontal, 12)
             .padding(.top, 6)
@@ -96,15 +70,24 @@ struct ContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
             } else {
-                Button("Process") {
-                    viewModel.startProcessing()
+                HStack(spacing: 10) {
+                    Button("Test Settings") {
+                        viewModel.testSettings()
+                    }
+                    .controlSize(.extraLarge)
+                    .disabled(viewModel.selectedGroup == nil)
+                    .help("Process the selected take with this group's settings into a temporary file and load it into the player's Processed lane for A/B comparison. Uploads at most the first 3 minutes per upload (Auphonic's billing minimum), so a test never costs more than the minimum.")
+
+                    Button("Process Batch") {
+                        viewModel.startProcessing()
+                    }
+                    .controlSize(.extraLarge)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .disabled(viewModel.batchFiles.isEmpty)
+                    .frame(maxWidth: .infinity)
                 }
-                .controlSize(.extraLarge)
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .keyboardShortcut(.return, modifiers: .command)
-                .disabled(viewModel.selectedFile == nil)
-                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
             }
@@ -113,13 +96,13 @@ struct ContentView: View {
             StatusView(
                 statusText: viewModel.statusText,
                 progress: viewModel.progress,
-                outputFile: viewModel.outputFile,
+                outputFile: nil,
                 outputDirectory: viewModel.outputDirectory
             )
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
         }
-        .frame(minWidth: 480, maxWidth: 800, minHeight: 500, maxHeight: 1200)
+        .frame(minWidth: 520, maxWidth: 900, minHeight: 560, maxHeight: 1200)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {

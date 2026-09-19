@@ -190,6 +190,116 @@ enum WavChunkCopier {
         return Int(bitsPerSample)
     }
 
+    // MARK: - WAV Format Info
+
+    /// Resolved sample format of a WAV file (WaveFormatExtensible is resolved to its subformat)
+    struct WavFormatInfo {
+        let formatTag: UInt16       // 1 = PCM integer, 3 = IEEE float
+        let channels: Int
+        let sampleRate: Double
+        let bitsPerSample: Int
+        let blockAlign: Int
+        var isFloat: Bool { formatTag == 3 }
+    }
+
+    /// True if the file uses the RF64/BW64 container (64-bit sizes), which this parser does not support
+    static func isRF64(file: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
+        defer { handle.closeFile() }
+        guard let header = try? handle.read(upToCount: 4), header.count == 4,
+              let id = String(data: header, encoding: .ascii) else { return false }
+        return id == "RF64" || id == "BW64"
+    }
+
+    static func readFormatInfo(from file: URL) -> WavFormatInfo? {
+        guard let fmtData = readChunk(from: file, chunkId: "fmt "),
+              fmtData.count >= 16 else { return nil }
+
+        var formatTag = fmtData.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 0, as: UInt16.self) }
+        let channels = fmtData.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 2, as: UInt16.self) }
+        let sampleRate = fmtData.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }
+        let blockAlign = fmtData.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 12, as: UInt16.self) }
+        let bitsPerSample = fmtData.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 14, as: UInt16.self) }
+
+        // WaveFormatExtensible: real format is in the SubFormat GUID (first 2 bytes at offset 24)
+        if formatTag == 0xFFFE, fmtData.count >= 26 {
+            formatTag = fmtData.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 24, as: UInt16.self) }
+        }
+
+        return WavFormatInfo(
+            formatTag: formatTag,
+            channels: Int(channels),
+            sampleRate: Double(sampleRate),
+            bitsPerSample: Int(bitsPerSample),
+            blockAlign: Int(blockAlign)
+        )
+    }
+
+    /// Locate a chunk's payload in the file. Returns the byte offset of the chunk data
+    /// (after the 8-byte chunk header) and its size.
+    static func findChunkRange(in file: URL, chunkId: String) -> (offset: UInt64, size: UInt64)? {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
+        defer { handle.closeFile() }
+
+        guard let headerData = try? handle.read(upToCount: 12),
+              headerData.count == 12,
+              String(data: headerData[0..<4], encoding: .ascii) == "RIFF" else { return nil }
+
+        var offset: UInt64 = 12
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? UInt64) ?? 0
+
+        while offset + 8 <= fileSize {
+            handle.seek(toFileOffset: offset)
+            guard let chunkHeader = try? handle.read(upToCount: 8),
+                  chunkHeader.count == 8 else { break }
+
+            let id = String(data: chunkHeader[0..<4], encoding: .ascii) ?? ""
+            let size = chunkHeader.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }
+
+            if id == chunkId {
+                return (offset: offset + 8, size: UInt64(size))
+            }
+
+            offset += 8 + UInt64(size)
+            if size % 2 != 0 { offset += 1 } // padding
+        }
+        return nil
+    }
+
+    // MARK: - BWF Timecode
+
+    /// Read the BWF TimeReference (samples since midnight) from the bext chunk.
+    /// Layout: Description(256) + Originator(32) + OriginatorReference(32) +
+    /// OriginationDate(10) + OriginationTime(8) = offset 338 (Low), 342 (High).
+    static func readBextTimeReference(from file: URL) -> UInt64? {
+        guard let bext = readChunk(from: file, chunkId: "bext"),
+              bext.count >= 346 else { return nil }
+        let low = bext.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 338, as: UInt32.self) }
+        let high = bext.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 342, as: UInt32.self) }
+        return (UInt64(high) << 32) | UInt64(low)
+    }
+
+    /// Read the timecode frame rate (fps) from the iXML SPEED section,
+    /// e.g. <TIMECODE_RATE>25/1</TIMECODE_RATE> → 25.0
+    static func readIxmlTimecodeRate(from file: URL) -> Double? {
+        guard let ixmlData = readIxmlChunk(from: file),
+              let xml = String(data: ixmlData, encoding: .utf8),
+              let match = xml.range(of: "<TIMECODE_RATE>[^<]*</TIMECODE_RATE>", options: .regularExpression) else {
+            return nil
+        }
+
+        let value = String(xml[match])
+            .replacingOccurrences(of: "<TIMECODE_RATE>", with: "")
+            .replacingOccurrences(of: "</TIMECODE_RATE>", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let parts = value.split(separator: "/")
+        if parts.count == 2, let num = Double(parts[0]), let den = Double(parts[1]), den != 0 {
+            return num / den
+        }
+        return Double(value)
+    }
+
     // MARK: - Downgrade WaveFormatExtensible to PCM
 
     /// Rewrites a WaveFormatExtensible fmt chunk (tag 0xFFFE, 40 bytes) to a simple

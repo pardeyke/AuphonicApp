@@ -165,6 +165,12 @@ final class ManualOptionsState {
         levelerEnabled || noiseEnabled || filteringEnabled || loudnessEnabled || outputFormatEnabled
     }
 
+    /// True when at least one actual processing algorithm is enabled
+    /// (output format alone doesn't count — it's forced to WAV anyway)
+    func hasAnyAlgorithmEnabled() -> Bool {
+        levelerEnabled || noiseEnabled || filteringEnabled || loudnessEnabled
+    }
+
     // MARK: - Widget State Persistence
 
     func getWidgetState() -> [String: Any] {
@@ -341,11 +347,14 @@ final class ManualOptionsState {
 
 // MARK: - View
 
+/// Auphonic algorithm settings styled after the Auphonic web production UI:
+/// one card per algorithm with a switch, short description, info popovers,
+/// and sliders/dropdowns for the parameters.
 struct ManualOptionsView: View {
     @Bindable var options: ManualOptionsState
     var onChange: (() -> Void)?
 
-    private let strengthValues = [120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0]
+    private let strengthValues = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
     private let musicStrengthValues = [-1, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0]
     private let compressorLabels = ["Auto", "Soft", "Medium", "Hard", "Off"]
     private let musicCompressorLabels = ["Same", "Auto", "Soft", "Medium", "Hard", "Off"]
@@ -354,150 +363,269 @@ struct ManualOptionsView: View {
     private let maxShortTermValues = [0, 3, 4, 5, 6, 8, 9, 10, 12]
     private let maxMomentaryValues = [0, 8, 9, 10, 11, 12, 15, 18, 20]
     private let noiseAmountValues = [0, -1, 3, 6, 9, 12, 15, 18, 24, 30, 36, 100]
-    private let dehumValues = [0, 50, 60]
-    private let loudnessTargets = [-13, -14, -15, -16, -18, -19, -20, -23, -24, -26, -27, -31]
+    private let loudnessTargets = [-31, -27, -26, -24, -23, -20, -19, -18, -16, -15, -14, -13]
     private let maxPeakValues: [Double] = [0, -0.5, -1, -1.5, -2, -3, -4, -5, -6]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            levelerSection
-            noiseSection
-            filteringSection
-            loudnessSection
-
-            Divider()
-            outputBehaviorSection
+            levelerCard
+            loudnessCard
+            filteringCard
+            noiseCard
         }
-        .padding(.horizontal, 4)
-        .onChange(of: options.levelerEnabled) { _, _ in onChange?() }
-        .onChange(of: options.noiseEnabled) { _, _ in onChange?() }
-        .onChange(of: options.filteringEnabled) { _, _ in onChange?() }
-        .onChange(of: options.loudnessEnabled) { _, _ in onChange?() }
-        .onChange(of: options.outputFormat) { _, _ in onChange?() }
     }
 
-    // MARK: - Leveler
+    /// Wrap a binding so every change also notifies onChange (marks preset as modified)
+    private func changed<T>(_ binding: Binding<T>) -> Binding<T> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: { binding.wrappedValue = $0; onChange?() }
+        )
+    }
 
-    private var levelerSection: some View {
-        OptionSection(title: "Adaptive Leveler", isEnabled: $options.levelerEnabled) {
-            LabeledPicker("Strength", selection: $options.levelerStrength) {
-                ForEach(strengthValues, id: \.self) { v in
-                    Text("\(v)%").tag(v)
-                }
+    // MARK: - Adaptive Leveler
+
+    /// 0 = Default, 1 = Separate Music/Speech, 2 = Broadcast Mode
+    private var levelerMode: Binding<Int> {
+        Binding(
+            get: {
+                if options.broadcastMode { return 2 }
+                if options.separateMS { return 1 }
+                return 0
+            },
+            set: { mode in
+                options.separateMS = (mode == 1)
+                options.broadcastMode = (mode == 2)
+                onChange?()
+            }
+        )
+    }
+
+    private func strengthLabel(_ v: Int) -> String {
+        switch v {
+        case 110: return "110% (Fast)"
+        case 120: return "120% (Amplify All)"
+        default: return "\(v)%"
+        }
+    }
+
+    private var levelerCard: some View {
+        AlgorithmCard(
+            title: "Adaptive Leveler",
+            subtitle: "Corrects level differences between speakers, music and speech",
+            info: AlgorithmInfo.leveler,
+            isEnabled: changed($options.levelerEnabled)
+        ) {
+            PickerRow("Leveler Mode", info: AlgorithmInfo.levelerMode, selection: levelerMode) {
+                Text("Default").tag(0)
+                Text("Separate Music/Speech").tag(1)
+                Text("Broadcast Mode").tag(2)
             }
 
-            LabeledPicker("Compressor", selection: $options.compressor) {
-                ForEach(1...5, id: \.self) { i in
-                    Text(compressorLabels[i - 1]).tag(i)
-                }
-            }
+            if !options.separateMS {
+                SliderRow(
+                    "Strength",
+                    info: AlgorithmInfo.levelerStrength,
+                    values: strengthValues,
+                    selection: changed($options.levelerStrength),
+                    display: strengthLabel
+                )
 
-            LabeledToggle("Separate Music/Speech", isOn: $options.separateMS)
-
-            if options.separateMS {
-                LabeledPicker("Classifier", selection: $options.classifier) {
-                    Text("On").tag(1)
-                    Text("Speech").tag(2)
-                    Text("Music").tag(3)
-                }
-
-                LabeledPicker("Speech Strength", selection: $options.speechStrength) {
-                    ForEach(strengthValues, id: \.self) { v in
-                        Text("\(v)%").tag(v)
+                PickerRow("Compressor", info: AlgorithmInfo.compressor, selection: changed($options.compressor)) {
+                    ForEach(1...5, id: \.self) { i in
+                        Text(compressorLabels[i - 1]).tag(i)
                     }
                 }
+            }
 
-                LabeledPicker("Speech Compressor", selection: $options.speechCompressor) {
+            if options.separateMS {
+                PickerRow("Classifier", info: AlgorithmInfo.classifier, selection: changed($options.classifier)) {
+                    Text("Level Music and Speech").tag(1)
+                    Text("Level Speech only").tag(2)
+                    Text("Level Music only").tag(3)
+                }
+
+                SliderRow(
+                    "Speech Strength",
+                    info: AlgorithmInfo.levelerStrength,
+                    values: strengthValues,
+                    selection: changed($options.speechStrength),
+                    display: strengthLabel
+                )
+
+                PickerRow("Speech Compressor", info: AlgorithmInfo.compressor, selection: changed($options.speechCompressor)) {
                     ForEach(1...5, id: \.self) { i in
                         Text(compressorLabels[i - 1]).tag(i)
                     }
                 }
 
-                LabeledPicker("Music Strength", selection: $options.musicStrength) {
+                PickerRow("Music Strength", info: AlgorithmInfo.levelerStrength, selection: changed($options.musicStrength)) {
                     ForEach(musicStrengthValues, id: \.self) { v in
                         Text(v == -1 ? "Same as Speech" : "\(v)%").tag(v)
                     }
                 }
 
-                LabeledPicker("Music Compressor", selection: $options.musicCompressor) {
+                PickerRow("Music Compressor", info: AlgorithmInfo.compressor, selection: changed($options.musicCompressor)) {
                     ForEach(0...5, id: \.self) { i in
                         Text(musicCompressorLabels[i]).tag(i)
                     }
                 }
 
-                LabeledPicker("Music Gain", selection: $options.musicGain) {
-                    ForEach(musicGainValues, id: \.self) { v in
-                        Text(v == 0 ? "0 dB" : "\(v > 0 ? "+" : "")\(v) dB").tag(v)
-                    }
-                }
+                SliderRow(
+                    "Music Gain",
+                    info: AlgorithmInfo.musicGain,
+                    values: musicGainValues,
+                    selection: changed($options.musicGain),
+                    display: { v in v == 0 ? "0 dB" : "\(v > 0 ? "+" : "")\(v) dB" }
+                )
             }
 
-            LabeledToggle("Broadcast Mode", isOn: $options.broadcastMode)
-
             if options.broadcastMode {
-                LabeledPicker("Max LRA", selection: $options.maxLRA) {
+                PickerRow("Max LRA", info: AlgorithmInfo.maxLRA, selection: changed($options.maxLRA)) {
                     ForEach(maxLRAValues, id: \.self) { v in
                         Text(v == 0 ? "Auto" : "\(v) LU").tag(v)
                     }
                 }
 
-                LabeledPicker("Max Short-Term", selection: $options.maxShortTerm) {
+                PickerRow("Max Short-Term", info: AlgorithmInfo.maxShortTerm, selection: changed($options.maxShortTerm)) {
                     ForEach(maxShortTermValues, id: \.self) { v in
                         Text(v == 0 ? "Auto" : "\(v) LU").tag(v)
                     }
                 }
 
-                LabeledPicker("Max Momentary", selection: $options.maxMomentary) {
+                PickerRow("Max Momentary", info: AlgorithmInfo.maxMomentary, selection: changed($options.maxMomentary)) {
                     ForEach(maxMomentaryValues, id: \.self) { v in
                         Text(v == 0 ? "Auto" : "\(v) LU").tag(v)
                     }
                 }
 
                 if !options.separateMS {
-                    LabeledPicker("Music Gain", selection: $options.musicGain) {
-                        ForEach(musicGainValues, id: \.self) { v in
-                            Text(v == 0 ? "0 dB" : "\(v > 0 ? "+" : "")\(v) dB").tag(v)
-                        }
-                    }
+                    SliderRow(
+                        "Music Gain",
+                        info: AlgorithmInfo.musicGain,
+                        values: musicGainValues,
+                        selection: changed($options.musicGain),
+                        display: { v in v == 0 ? "0 dB" : "\(v > 0 ? "+" : "")\(v) dB" }
+                    )
                 }
             }
         }
     }
 
-    // MARK: - Noise
+    // MARK: - Loudness Normalization
 
+    private var loudnessCard: some View {
+        AlgorithmCard(
+            title: "Loudness Normalization",
+            subtitle: "Normalizes the file to a loudness target with a true peak limiter",
+            info: AlgorithmInfo.loudness,
+            isEnabled: changed($options.loudnessEnabled)
+        ) {
+            SliderRow(
+                "Loudness Target",
+                info: AlgorithmInfo.loudnessTarget,
+                values: loudnessTargets,
+                selection: changed($options.loudnessTarget),
+                display: { "\($0) LUFS" }
+            )
+
+            PickerRow("Max Peak Level", info: AlgorithmInfo.maxPeak, selection: changed($options.maxPeak)) {
+                ForEach(maxPeakValues, id: \.self) { v in
+                    Text(v == 0 ? "Auto" : String(format: "%.1f dBTP", v)).tag(v)
+                }
+            }
+
+            PickerRow("Method", info: AlgorithmInfo.loudnessMethod, selection: changed($options.loudnessMethod)) {
+                Text("Program Loudness").tag(1)
+                Text("Dialog Loudness").tag(2)
+                Text("RMS").tag(3)
+            }
+
+            ToggleRow("Dual Mono", info: AlgorithmInfo.dualMono, isOn: changed($options.dualMono))
+        }
+    }
+
+    // MARK: - Filtering
+
+    private var filteringCard: some View {
+        AlgorithmCard(
+            title: "Filtering",
+            subtitle: "Adaptive high-pass filtering and voice spectrum optimization",
+            info: AlgorithmInfo.filtering,
+            isEnabled: changed($options.filteringEnabled)
+        ) {
+            PickerRow("Method", info: AlgorithmInfo.filteringMethod, selection: changed($options.filteringMethod)) {
+                Text("Adaptive High-Pass Filter").tag(1)
+                Text("Voice AutoEQ").tag(2)
+                Text("Voice AutoEQ + Bandwidth Extension").tag(3)
+            }
+        }
+    }
+
+    // MARK: - Noise & Reverb Reduction
+
+    /// dB amount labels with the web UI's low/medium/high/full annotations.
+    /// Per the API docs, 0 means "Auto" for the Classic denoiser but
+    /// "100 dB full" for the other methods — where it duplicates the explicit
+    /// 100 entry, so callers hide 100 for non-classic methods.
     private func noiseAmountLabel(_ v: Int, isClassic: Bool) -> String {
         switch v {
-        case 0: return isClassic ? "Auto" : "Full"
+        case 0: return isClassic ? "Auto" : "Full (100 dB)"
         case -1: return "Off"
-        case 100: return "100 dB"
+        case 6: return "6 dB (low)"
+        case 12: return "12 dB (medium)"
+        case 24: return "24 dB (high)"
+        case 100: return "100 dB (full)"
         default: return "\(v) dB"
         }
     }
 
-    private var noiseSection: some View {
-        OptionSection(title: "Noise & Reverb Reduction", isEnabled: $options.noiseEnabled) {
-            LabeledPicker("Method", selection: $options.noiseMethod) {
-                Text("Classic").tag(1)
-                Text("Dynamic").tag(2)
+    /// Valid amount values for the current method: the explicit 100 entry is
+    /// redundant when 0 already means "full" (all methods except Classic).
+    /// "Full" is always the last menu entry, like in the web UI.
+    private func noiseAmountOptions(isClassic: Bool) -> [Int] {
+        if isClassic { return noiseAmountValues }
+        return noiseAmountValues.filter { $0 != 100 && $0 != 0 } + [0]
+    }
+
+    private var noiseCard: some View {
+        AlgorithmCard(
+            title: "Noise & Reverb Reduction",
+            subtitle: "Removes background noise, hum and reverb from speech",
+            info: AlgorithmInfo.denoise,
+            isEnabled: changed($options.noiseEnabled)
+        ) {
+            PickerRow("Method", info: AlgorithmInfo.denoiseMethod, selection: Binding(
+                get: { options.noiseMethod },
+                set: { method in
+                    options.noiseMethod = method
+                    // Outside Classic, 0 already means "full" — fold the explicit 100 into it
+                    if method != 1 && options.noiseAmount == 100 {
+                        options.noiseAmount = 0
+                    }
+                    onChange?()
+                }
+            )) {
+                Text("Classic Denoiser").tag(1)
+                Text("Dynamic Denoiser").tag(2)
                 Text("Speech Isolation").tag(3)
-                Text("Static").tag(4)
+                Text("Static Denoiser").tag(4)
             }
 
-            LabeledPicker("Remove Noise", selection: $options.noiseAmount) {
-                ForEach(noiseAmountValues, id: \.self) { v in
+            PickerRow("Remove Noise", info: AlgorithmInfo.denoiseAmount, selection: changed($options.noiseAmount)) {
+                ForEach(noiseAmountOptions(isClassic: options.noiseMethod == 1), id: \.self) { v in
                     Text(noiseAmountLabel(v, isClassic: options.noiseMethod == 1)).tag(v)
                 }
             }
 
             if options.noiseMethod == 1 {
-                LabeledPicker("Hum Base Freq", selection: $options.dehum) {
+                PickerRow("Hum Base Frequency", info: AlgorithmInfo.dehum, selection: changed($options.dehum)) {
                     Text("Auto").tag(0)
                     Text("50 Hz").tag(50)
                     Text("60 Hz").tag(60)
                 }
 
-                LabeledPicker("Remove Hum", selection: $options.dehumAmount) {
+                PickerRow("Remove Hum", info: AlgorithmInfo.dehumAmount, selection: changed($options.dehumAmount)) {
                     ForEach(noiseAmountValues.filter { $0 != 36 }, id: \.self) { v in
                         Text(noiseAmountLabel(v, isClassic: true)).tag(v)
                     }
@@ -505,227 +633,239 @@ struct ManualOptionsView: View {
             }
 
             if options.noiseMethod >= 2 {
-                LabeledPicker("Remove Reverb", selection: $options.reverbAmount) {
-                    ForEach(noiseAmountValues, id: \.self) { v in
+                PickerRow("Remove Reverb", info: AlgorithmInfo.reverbAmount, selection: changed($options.reverbAmount)) {
+                    ForEach(noiseAmountOptions(isClassic: false), id: \.self) { v in
                         Text(noiseAmountLabel(v, isClassic: false)).tag(v)
                     }
                 }
             }
 
             if options.noiseMethod == 2 || options.noiseMethod == 3 {
-                LabeledPicker("Remove Breaths", selection: $options.breathAmount) {
+                PickerRow("Remove Breaths", info: AlgorithmInfo.breathAmount, selection: changed($options.breathAmount)) {
                     ForEach(noiseAmountValues.filter { $0 != 0 }, id: \.self) { v in
-                        Text(v == -1 ? "Off" : "\(v == 100 ? "100" : "\(v)") dB").tag(v)
+                        Text(noiseAmountLabel(v, isClassic: false)).tag(v)
                     }
                 }
             }
-        }
-    }
-
-    // MARK: - Filtering
-
-    private var filteringSection: some View {
-        OptionSection(title: "Filtering", isEnabled: $options.filteringEnabled) {
-            LabeledPicker("Method", selection: $options.filteringMethod) {
-                Text("High-Pass Filter").tag(1)
-                Text("Auto EQ").tag(2)
-                Text("Bandwidth Extension").tag(3)
-            }
-        }
-    }
-
-    // MARK: - Loudness
-
-    private var loudnessSection: some View {
-        OptionSection(title: "Loudness Normalization", isEnabled: $options.loudnessEnabled) {
-            LabeledPicker("Target", selection: $options.loudnessTarget) {
-                ForEach(loudnessTargets, id: \.self) { target in
-                    Text("\(target) LUFS").tag(target)
-                }
-            }
-
-            LabeledPicker("Max Peak", selection: $options.maxPeak) {
-                ForEach(maxPeakValues, id: \.self) { v in
-                    Text(v == 0 ? "Auto" : "\(v, specifier: "%.1f") dBTP").tag(v)
-                }
-            }
-
-            LabeledPicker("Method", selection: $options.loudnessMethod) {
-                Text("Program").tag(1)
-                Text("Dialog").tag(2)
-                Text("RMS").tag(3)
-            }
-
-            LabeledToggle("Dual Mono", isOn: $options.dualMono)
-        }
-    }
-
-    // MARK: - Output Behavior
-
-    private let previewDurations: [(String, Double)] = [
-        ("30s", 30), ("1m", 60), ("3m", 180), ("5m", 300), ("10m", 600)
-    ]
-
-    private let lowerPickerWidth: CGFloat = 180
-
-    private var outputBehaviorSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if options.forcedOutputFormat == nil {
-                HStack {
-                    Text("Output Format")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .frame(width: 110, alignment: .leading)
-                    Picker("", selection: $options.outputFormat) {
-                        ForEach(OutputFormat.allCases) { fmt in
-                            Text(fmt.displayName).tag(fmt)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: lowerPickerWidth)
-                }
-
-                if options.outputFormat.hasBitrate {
-                    HStack {
-                        HStack(spacing: 0) {
-                            Spacer().frame(width: 16)
-                            Text("Bitrate")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .fixedSize()
-                        }
-                        .frame(width: 110, alignment: .leading)
-                        Picker("", selection: $options.bitrate) {
-                            ForEach(options.outputFormat.availableBitrates, id: \.self) { br in
-                                Text("\(br) kbps").tag(br)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: lowerPickerWidth)
-                    }
-                }
-            } else {
-                HStack {
-                    Text("Output Format")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .frame(width: 110, alignment: .leading)
-                    Text("WAV (forced)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if options.fileDuration > 30 {
-                HStack {
-                    Toggle("Preview", isOn: $options.previewEnabled)
-                        .font(.system(size: 12))
-                        .fixedSize()
-                    Picker("", selection: $options.previewDuration) {
-                        ForEach(previewDurations.filter { $0.1 < options.fileDuration }, id: \.1) { label, dur in
-                            Text(label).tag(dur)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 70)
-                    .disabled(!options.previewEnabled)
-                }
-            }
-
-            LabeledToggle("Create a new file (don't overwrite)", isOn: $options.avoidOverwrite)
-
-            if options.avoidOverwrite {
-                HStack {
-                    HStack(spacing: 0) {
-                        Spacer().frame(width: 16)
-                        Text("Suffix")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
-                    .frame(width: 110, alignment: .leading)
-                    TextField("Suffix", text: $options.outputSuffix)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: lowerPickerWidth)
-                        .font(.system(size: 12))
-                }
-            }
-
-            LabeledToggle("Write settings JSON alongside output", isOn: $options.writeSettingsXml)
-
-            LabeledToggle("Keep WAV metadata (Timecode, Notes, etc.)", isOn: $options.keepTimecode)
         }
     }
 }
 
-// MARK: - Helper Views
+private struct ManualOptionsPreviewHost: View {
+    let options: ManualOptionsState
 
-struct OptionSection<Content: View>: View {
+    init() {
+        let state = ManualOptionsState()
+        state.levelerEnabled = true
+        state.noiseEnabled = true
+        state.noiseMethod = 2
+        state.loudnessEnabled = true
+        self.options = state
+    }
+
+    var body: some View {
+        ScrollView {
+            ManualOptionsView(options: options)
+                .padding(16)
+        }
+        .frame(width: 560, height: 760)
+    }
+}
+
+#Preview("Algorithm Settings") {
+    ManualOptionsPreviewHost()
+}
+
+// MARK: - Card & Row Components
+
+/// One algorithm block styled after the Auphonic web UI: a switch, title with
+/// short description, an info popover, and the parameters when enabled.
+struct AlgorithmCard<Content: View>: View {
     let title: String
+    let subtitle: String
+    let info: String
     @Binding var isEnabled: Bool
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Toggle(title, isOn: $isEnabled)
-                .font(.system(size: 13, weight: .medium))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Toggle("", isOn: $isEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                InfoButton(title: title, text: info)
+            }
 
             if isEnabled {
-                VStack(alignment: .leading, spacing: 4) {
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
                     content()
                 }
-                .padding(.leading, 16)
+                .padding(.leading, 4)
             }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+        )
+    }
+}
+
+/// ⓘ button that shows an explanation popover (texts from the Auphonic docs)
+struct InfoButton: View {
+    let title: String
+    let text: String
+    @State private var showingInfo = false
+
+    var body: some View {
+        Button {
+            showingInfo.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showingInfo, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(text)
+                    .font(.system(size: 11))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .frame(width: 340, alignment: .leading)
         }
     }
 }
 
-struct LabeledToggle: View {
+private let parameterLabelWidth: CGFloat = 130
+
+/// Parameter row with a dropdown, like the web UI's selects
+struct PickerRow<SelectionValue: Hashable, Content: View>: View {
     let label: String
-    @Binding var isOn: Bool
-
-    init(_ label: String, isOn: Binding<Bool>) {
-        self.label = label
-        self._isOn = isOn
-    }
-
-    var body: some View {
-        Toggle(label, isOn: $isOn)
-            .font(.system(size: 12))
-    }
-}
-
-struct LabeledPicker<SelectionValue: Hashable, Content: View>: View {
-    let label: String
+    let info: String
     @Binding var selection: SelectionValue
     @ViewBuilder var content: () -> Content
 
-    init(_ label: String, selection: Binding<SelectionValue>, @ViewBuilder content: @escaping () -> Content) {
+    init(_ label: String, info: String, selection: Binding<SelectionValue>, @ViewBuilder content: @escaping () -> Content) {
         self.label = label
+        self.info = info
         self._selection = selection
         self.content = content
     }
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
             Text(label)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .fixedSize()
-                .frame(width: 110, alignment: .leading)
+                .frame(width: parameterLabelWidth, alignment: .leading)
 
             Picker("", selection: $selection) {
                 content()
             }
             .labelsHidden()
-            .frame(maxWidth: 200)
+            .frame(maxWidth: 230)
+
+            InfoButton(title: label, text: info)
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// Parameter row with a discrete slider and value label, like the web UI's sliders
+struct SliderRow: View {
+    let label: String
+    let info: String
+    let values: [Int]           // ascending
+    @Binding var selection: Int
+    let display: (Int) -> String
+
+    init(_ label: String, info: String, values: [Int], selection: Binding<Int>, display: @escaping (Int) -> String) {
+        self.label = label
+        self.info = info
+        self.values = values.sorted()
+        self._selection = selection
+        self.display = display
+    }
+
+    private var index: Binding<Double> {
+        Binding(
+            get: { Double(values.firstIndex(of: selection) ?? nearestIndex(to: selection)) },
+            set: { selection = values[max(0, min(values.count - 1, Int($0.rounded())))] }
+        )
+    }
+
+    private func nearestIndex(to value: Int) -> Int {
+        values.enumerated().min(by: { abs($0.element - value) < abs($1.element - value) })?.offset ?? 0
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(width: parameterLabelWidth, alignment: .leading)
+
+            Slider(value: index, in: 0...Double(values.count - 1), step: 1)
+                .controlSize(.small)
+                .frame(maxWidth: 230)
+
+            Text(display(selection))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+
+            InfoButton(title: label, text: info)
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// Parameter row with a checkbox
+struct ToggleRow: View {
+    let label: String
+    let info: String
+    @Binding var isOn: Bool
+
+    init(_ label: String, info: String, isOn: Binding<Bool>) {
+        self.label = label
+        self.info = info
+        self._isOn = isOn
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Toggle(label, isOn: $isOn)
+                .font(.system(size: 12))
+                .toggleStyle(.checkbox)
+
+            InfoButton(title: label, text: info)
+
+            Spacer(minLength: 0)
         }
     }
 }

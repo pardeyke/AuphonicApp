@@ -57,6 +57,13 @@ struct AuphonicAPIClientTests {
         #expect(AuphonicAPIClient.APIError.decodingError("bad json").errorDescription == "Failed to parse response: bad json")
     }
 
+    @Test func deleteProductionThrowsWithoutToken() async {
+        let client = AuphonicAPIClient()
+        await #expect(throws: AuphonicAPIClient.APIError.self) {
+            try await client.deleteProduction(uuid: "abc")
+        }
+    }
+
     // MARK: - Token Requirement
 
     @Test func fetchUserInfoThrowsWithoutToken() async {

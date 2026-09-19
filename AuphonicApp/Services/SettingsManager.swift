@@ -10,6 +10,7 @@ final class SettingsManager {
         static let lastManualSettings = "lastManualSettings"
         static let audioOutputDevice = "audioOutputDevice"
         static let perChannelMode = "perChannelMode"
+        static let deleteProductionsAfterDownload = "deleteProductionsAfterDownload"
     }
 
     var apiToken: String {
@@ -37,6 +38,13 @@ final class SettingsManager {
     var perChannelMode: Bool {
         get { defaults.bool(forKey: Keys.perChannelMode) }
         set { defaults.set(newValue, forKey: Keys.perChannelMode) }
+    }
+
+    /// Housekeeping: delete productions on Auphonic once their output has been
+    /// downloaded and written into the local output file
+    var deleteProductionsAfterDownload: Bool {
+        get { defaults.bool(forKey: Keys.deleteProductionsAfterDownload) }
+        set { defaults.set(newValue, forKey: Keys.deleteProductionsAfterDownload) }
     }
 
 }

@@ -170,6 +170,19 @@ final class AuphonicAPIClient {
         )
     }
 
+    /// Delete a production on Auphonic (housekeeping after successful download)
+    func deleteProduction(uuid: String) async throws {
+        guard !token.isEmpty else { throw APIError.noToken }
+
+        var request = URLRequest(url: URL(string: "\(baseURL)/production/\(uuid).json")!)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 30
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(data: data, response: response)
+    }
+
     func downloadFile(from urlString: String, onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         guard let url = URL(string: urlString) else {
             throw APIError.networkError("Invalid download URL")
@@ -242,7 +255,7 @@ final class AuphonicAPIClient {
         }
 
         switch httpResponse.statusCode {
-        case 200, 201:
+        case 200, 201, 204:
             return
         case 401, 403:
             throw APIError.invalidToken

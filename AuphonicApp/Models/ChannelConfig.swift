@@ -1,16 +1,20 @@
 import Foundation
 
-/// Describes a single API processing job (mono channel or stereo pair extraction)
-struct ProcessingJob {
-    /// 1-based channel indices to extract. Empty = whole file as-is.
+/// One Auphonic production for a file: one channel (mono upload) or two
+/// channels packed/paired into a stereo upload. Indices are 1-based.
+struct UploadJob: Equatable {
     let channelIndices: [Int]
 
     var isStereo: Bool { channelIndices.count == 2 }
     var isMono: Bool { channelIndices.count == 1 }
-    var isWholeFile: Bool { channelIndices.isEmpty }
+
+    /// Short label like "Ch 3" or "Ch 3+5"
+    var label: String {
+        "Ch " + channelIndices.map(String.init).joined(separator: "+")
+    }
 }
 
-/// Represents one channel in the file
+/// Represents one channel in the files of a group
 @Observable
 final class ChannelEntry: Identifiable {
     let id: Int                          // 0-based channel index
@@ -26,7 +30,8 @@ final class ChannelEntry: Identifiable {
     }
 }
 
-/// Unified channel configuration that replaces the old perChannelMode + ChannelTabsState
+/// Per-group channel configuration: which channels are processed, how they are
+/// paired/packed into Auphonic uploads, and the processing settings.
 @Observable
 final class ChannelConfig {
     // File properties (set by configure())
@@ -37,14 +42,12 @@ final class ChannelConfig {
     // Channel state
     var channels: [ChannelEntry] = []
 
-    // Stereo mode: true = process 2-ch file as stereo (only meaningful for 2-ch files)
-    var stereoMode: Bool = true
-
     // Settings mode
     var linkedSettings: Bool = true     // true = one shared ManualOptionsState for all channels
 
-    // Merge output
-    var mergeOutput: Bool = true        // true = merge processed channels back into multichannel
+    // Pack unpaired mono channels into stereo uploads. Auphonic bills by file
+    // duration regardless of channel count, so this halves the credit cost.
+    var packMonoChannels: Bool = true
 
     // Shared settings (used when linkedSettings == true)
     let sharedOptions = ManualOptionsState()
@@ -53,11 +56,8 @@ final class ChannelConfig {
     var selectedPresetUuid: String = ""
     var presetModified: Bool = false
 
-    // Output behavior (shared across all channels)
-    var avoidOverwrite: Bool = true
-    var outputSuffix: String = "_auphonic"
+    // Write the used settings as a JSON sidecar next to each output file
     var writeSettingsXml: Bool = false
-    var keepTimecode: Bool = false
 
     // MARK: - Configuration
 
@@ -69,27 +69,13 @@ final class ChannelConfig {
 
         channels = (0..<count).map { idx in
             let name = channelDisplayName(index: idx, count: count, trackNames: trackNames)
-            let entry = ChannelEntry(id: idx, displayName: name)
-            configureChannelOptions(entry.options)
-            return entry
+            return ChannelEntry(id: idx, displayName: name)
         }
 
-        // Default stereoMode based on channel count
+        // 2-channel files default to a genuine stereo pair (L/R processed together)
         if count == 2 {
-            stereoMode = true
-        } else {
-            stereoMode = false
+            linkStereo(ch1: 0, ch2: 1)
         }
-
-        // Configure shared options too
-        configureChannelOptions(sharedOptions)
-    }
-
-    private func configureChannelOptions(_ opts: ManualOptionsState) {
-        let wavFormat = bitDepth <= 16 ? "wav-16bit" : "wav-24bit"
-        opts.forcedOutputFormat = wavFormat
-        opts.outputFormatEnabled = true
-        opts.outputFormat = bitDepth <= 16 ? .wav16 : .wav24
     }
 
     private func channelDisplayName(index: Int, count: Int, trackNames: [String]) -> String {
@@ -152,67 +138,76 @@ final class ChannelConfig {
         channels.filter(\.enabled).count
     }
 
-    // MARK: - Computed Properties
+    // MARK: - Upload Jobs (packing)
 
-    /// Whether a stereo/multi-mono picker should be shown (only for 2-channel files)
-    var showsModeToggle: Bool {
-        fileChannelCount == 2
-    }
-
-    /// Whether the channel list should be shown
-    var showsChannelList: Bool {
-        if fileChannelCount <= 1 { return false }
-        if fileChannelCount == 2 && stereoMode { return false }
-        return true
-    }
-
-    /// Whether whole-file processing is used (no channel extraction)
-    var isWholeFileMode: Bool {
-        if fileChannelCount <= 1 { return true }
-        if fileChannelCount == 2 && stereoMode { return true }
-        return false
-    }
-
-    /// Whether merge output checkbox should be available
-    var mergeAvailable: Bool {
-        !isWholeFileMode && enabledChannelCount > 1
-    }
-
-    /// Number of API calls per file
+    /// Number of Auphonic productions per file
     var apiCallCount: Int {
-        if isWholeFileMode { return 1 }
-        return processingJobs.count
+        uploadJobs.count
     }
 
-    /// Whether WAV output must be forced (needed for merge)
-    var requiresWavOutput: Bool {
-        !isWholeFileMode && mergeOutput
-    }
-
-    /// Build the list of processing jobs from current configuration
-    var processingJobs: [ProcessingJob] {
-        if isWholeFileMode {
-            return [ProcessingJob(channelIndices: [])]
-        }
-
-        var jobs: [ProcessingJob] = []
+    /// Build the upload jobs for one file of this group.
+    ///
+    /// - User-defined stereo pairs always become one stereo upload.
+    /// - Remaining enabled channels are packed two-per-upload when
+    ///   `packMonoChannels` is on — but only channels with identical settings
+    ///   can share an upload, since a production has a single settings set.
+    var uploadJobs: [UploadJob] {
+        var jobs: [UploadJob] = []
         var visited = Set<Int>()
+        var loose: [ChannelEntry] = []      // enabled, unpaired channels
 
         for ch in channels where ch.enabled && !visited.contains(ch.id) {
             visited.insert(ch.id)
 
-            if let partner = ch.stereoPairPartner, channels[partner].enabled {
+            if let partner = ch.stereoPairPartner,
+               partner < channels.count, channels[partner].enabled {
                 visited.insert(partner)
-                // Stereo pair: lower index first
                 let indices = [min(ch.id, partner) + 1, max(ch.id, partner) + 1]
-                jobs.append(ProcessingJob(channelIndices: indices))
+                jobs.append(UploadJob(channelIndices: indices))
             } else {
-                // Mono extraction
-                jobs.append(ProcessingJob(channelIndices: [ch.id + 1]))
+                loose.append(ch)
+            }
+        }
+
+        if packMonoChannels {
+            // Bucket by settings signature: only identical settings may share a production
+            var buckets: [String: [ChannelEntry]] = [:]
+            var bucketOrder: [String] = []
+            for ch in loose {
+                let key = linkedSettings ? "linked" : settingsSignature(for: ch)
+                if buckets[key] == nil { bucketOrder.append(key) }
+                buckets[key, default: []].append(ch)
+            }
+
+            for key in bucketOrder {
+                let bucket = buckets[key] ?? []
+                var i = 0
+                while i + 1 < bucket.count {
+                    jobs.append(UploadJob(channelIndices: [bucket[i].id + 1, bucket[i + 1].id + 1]))
+                    i += 2
+                }
+                if i < bucket.count {
+                    jobs.append(UploadJob(channelIndices: [bucket[i].id + 1]))
+                }
+            }
+        } else {
+            for ch in loose {
+                jobs.append(UploadJob(channelIndices: [ch.id + 1]))
             }
         }
 
         return jobs
+    }
+
+    /// Canonical serialization of a channel's settings, used to decide which
+    /// channels may be packed into the same upload.
+    private func settingsSignature(for channel: ChannelEntry) -> String {
+        let settings = channel.options.getSettings()
+        guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]),
+              let string = String(data: data, encoding: .utf8) else {
+            return "ch\(channel.id)"    // unpackable fallback: unique bucket
+        }
+        return string
     }
 
     /// Get channels that are linkable as stereo pair for a given channel
@@ -226,12 +221,16 @@ final class ChannelConfig {
 
     // MARK: - Settings Retrieval
 
-    /// Get the effective ManualOptionsState for a given processing job
-    func optionsForJob(_ job: ProcessingJob) -> ManualOptionsState {
-        if linkedSettings || job.isWholeFile {
+    /// The Auphonic WAV output format used for round-tripping processed channels
+    var forcedWavFormat: String {
+        bitDepth <= 16 ? "wav-16bit" : "wav-24bit"
+    }
+
+    /// Get the effective ManualOptionsState for a given upload job
+    func optionsForJob(_ job: UploadJob) -> ManualOptionsState {
+        if linkedSettings {
             return sharedOptions
         }
-        // For unlinked: use the first channel's options in the job
         if let firstIdx = job.channelIndices.first {
             let chIdx = firstIdx - 1  // convert 1-based to 0-based
             if chIdx >= 0 && chIdx < channels.count {
@@ -241,27 +240,33 @@ final class ChannelConfig {
         return sharedOptions
     }
 
-    /// Get settings dict for a processing job
-    func settingsForJob(_ job: ProcessingJob) -> [String: Any] {
+    /// Settings dict for an upload job. Output is always forced to WAV so the
+    /// processed channels can be written back into the original container.
+    func settingsForJob(_ job: UploadJob) -> [String: Any] {
         let opts = optionsForJob(job)
         var settings = opts.getSettings()
-
-        // Force WAV output when merge is needed
-        if requiresWavOutput {
-            let wavFormat = bitDepth <= 16 ? "wav-16bit" : "wav-24bit"
-            settings["output_format"] = wavFormat
-            settings["output_files"] = [["format": wavFormat]]
-        }
-
+        settings["output_format"] = forcedWavFormat
+        settings["output_files"] = [["format": forcedWavFormat]]
+        settings.removeValue(forKey: "bitrate")
         return settings
     }
 
-    /// Get preset UUID for a processing job
-    func presetUuidForJob(_ job: ProcessingJob) -> String {
-        if linkedSettings || job.isWholeFile {
+    /// Get preset UUID for an upload job
+    func presetUuidForJob(_ job: UploadJob) -> String {
+        if linkedSettings {
             return presetModified ? "" : selectedPresetUuid
         }
         // Per-channel mode doesn't use presets currently
         return ""
+    }
+
+    /// Whether the current configuration has anything to process
+    var hasValidJobConfiguration: Bool {
+        guard !uploadJobs.isEmpty else { return false }
+        if linkedSettings {
+            let preset = presetModified ? "" : selectedPresetUuid
+            return !preset.isEmpty || sharedOptions.hasAnyAlgorithmEnabled()
+        }
+        return uploadJobs.allSatisfy { optionsForJob($0).hasAnyAlgorithmEnabled() }
     }
 }

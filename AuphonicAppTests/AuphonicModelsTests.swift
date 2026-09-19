@@ -2,55 +2,6 @@ import Testing
 import Foundation
 @testable import AuphonicApp
 
-// MARK: - ProcessingState Tests
-
-struct ProcessingStateTests {
-
-    @Test func isActiveForActiveStates() {
-        let activeStates: [ProcessingState] = [
-            .extractingChannel, .trimming, .creatingProduction,
-            .uploading, .starting, .processing,
-            .downloading, .converting, .saving
-        ]
-        for state in activeStates {
-            #expect(state.isActive, "\(state) should be active")
-        }
-    }
-
-    @Test func isActiveForInactiveStates() {
-        #expect(!ProcessingState.idle.isActive)
-        #expect(!ProcessingState.done.isActive)
-        #expect(!ProcessingState.error("test").isActive)
-    }
-
-    @Test func statusTexts() {
-        #expect(ProcessingState.idle.statusText == "Ready")
-        #expect(ProcessingState.extractingChannel.statusText == "Extracting channel...")
-        #expect(ProcessingState.trimming.statusText == "Trimming preview...")
-        #expect(ProcessingState.creatingProduction.statusText == "Creating production...")
-        #expect(ProcessingState.uploading.statusText == "Uploading...")
-        #expect(ProcessingState.starting.statusText == "Starting production...")
-        #expect(ProcessingState.processing.statusText == "Processing...")
-        #expect(ProcessingState.downloading.statusText == "Downloading...")
-        #expect(ProcessingState.converting.statusText == "Converting format...")
-        #expect(ProcessingState.saving.statusText == "Saving...")
-        #expect(ProcessingState.done.statusText == "Done")
-    }
-
-    @Test func errorStatusText() {
-        let state = ProcessingState.error("Connection lost")
-        #expect(state.statusText == "Error: Connection lost")
-    }
-
-    @Test func equatable() {
-        #expect(ProcessingState.idle == ProcessingState.idle)
-        #expect(ProcessingState.done == ProcessingState.done)
-        #expect(ProcessingState.error("a") == ProcessingState.error("a"))
-        #expect(ProcessingState.error("a") != ProcessingState.error("b"))
-        #expect(ProcessingState.idle != ProcessingState.done)
-    }
-}
-
 // MARK: - ProductionStatus Tests
 
 struct ProductionStatusTests {
