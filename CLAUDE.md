@@ -8,8 +8,10 @@ Core invariants:
 
 - **Originals are never modified.** Output = byte-for-byte copy of the original with only the processed channels' samples patched in the data chunk (`ChannelReplacer`). Untouched channels and all metadata chunks (bext timecode, iXML track names, etc.) stay bit-perfect; the container keeps its sample format (incl. 32-bit float).
 - **Files are grouped for batch configuration.** Files are sorted by BWF timecode (bext TimeReference) and consecutive runs with the same channel count form a `FileGroup`; API settings are configured once per group.
-- **Stereo packing saves credits.** Auphonic bills per minute of upload duration regardless of channel count (3-min minimum per production), so unpaired mono channels are packed two-per-stereo-upload (`ChannelConfig.uploadJobs`). Only channels with identical settings may share an upload. Toggle per group in case joint stereo processing causes cross-channel interference.
-- Multitrack productions are deliberately NOT used (user decision — unsuited to this workflow).
+- **Two production modes, switchable per group** (`ChannelConfig.productionMode`):
+  - *Singletrack*: one mono production per selected channel (24-bit output). Channels must never share an upload — Auphonic support confirmed singletrack treats a stereo file as one finished mix.
+  - *Multitrack*: one production per file, every selected channel uploaded as its own track (per-track denoise/leveler + master gate/crosstalk damping). Bills one 3-min minimum per file instead of per channel, but Auphonic currently exports individual tracks as **16-bit** (verified for both wav.zip and flac.zip) — 24-bit request pending with support.
+- Multitrack always exports the individual tracks (written back into their own channels). Optionally the master mixdown is downloaded too (always requested with `mono_mixdown: true`) and written into a user-chosen channel of the output file.
 
 ## Build & Run
 
@@ -34,8 +36,8 @@ MVVM pattern with a service layer:
 
 - **Models/** — `BatchFile`/`FileGroup`/`FileGrouper` (file metadata + timecode grouping), `ChannelConfig` (per-group channel selection, stereo pairing, packing into `UploadJob`s), `AuphonicModels.swift`, `OutputFormat.swift`
 - **Views/** — SwiftUI views + `AppViewModel` (`@Observable`); `FileListView` (grouped batch list), `ChannelConfigView` (per-group config), `ManualOptionsView` (per-channel Auphonic algorithm settings, holds `ManualOptionsState`)
-- **Services/** — `AuphonicAPIClient` (API-key bearer auth), `ChannelReplacer` (in-place channel patching), `WavChunkCopier` (RIFF chunk read/write, bext timecode, iXML track names), `AudioPlayerService`, `SettingsManager`, `NotificationService`
-- **Processing/** — `BatchWorkflow`: per file → extract packed channels (chunked, format-preserving) → one Auphonic production per upload job (create/upload/start/poll/download, max 3 concurrent) → `ChannelReplacer` writes the output into the chosen destination folder under the original file name
+- **Services/** — `AuphonicAPIClient` (API-key bearer auth, singletrack + multitrack productions, streamed multipart upload), `ChannelReplacer` (in-place channel patching), `WavChunkCopier` (RIFF chunk read/write, bext timecode, iXML track names/timecode rate), `ZipArchive` (minimal ZIP reader for the tracks archive), `AudioPlayerService`, `SettingsManager`, `NotificationService`
+- **Processing/** — `BatchWorkflow`: per file → extract channels (chunked, format-preserving) → *singletrack*: one production per channel (max 3 concurrent) / *multitrack*: one production with all tracks, unzip the tracks archive and map files back to channels → `ChannelReplacer` writes the output into the chosen destination folder under the original file name
 
 ## Key Patterns
 

@@ -111,6 +111,56 @@ enum AlgorithmInfo {
     noise, reverb or other environmental sounds.
     """
 
+    // MARK: Multitrack
+
+    static let productionMode = """
+    Singletrack sends every selected channel to Auphonic as its own production. \
+    Each production is billed separately (3 minute minimum each), and the channels are \
+    processed completely independently of each other.
+
+    Multitrack sends all selected channels of a file as tracks of ONE production. \
+    Auphonic processes every track individually but also analyses them together, which enables \
+    crosstalk/mic bleed damping and a combined master. One production per file means one \
+    billing minimum per file instead of one per channel.
+
+    Note: Auphonic currently exports the individual tracks of a multitrack production as \
+    16-bit audio, while singletrack returns 24-bit.
+    """
+
+    static let multitrackMixdown = """
+    A multitrack production always returns the processed individual tracks, which are written \
+    back into their own channels of the output file. In addition, Auphonic creates a master \
+    mixdown of all tracks — enable this to download it as well.
+    """
+
+    static let mixdownTarget = """
+    Writes the master mixdown into this channel of the output file, replacing its audio. \
+    Choose a channel you don't need separately (e.g. a mix track) or leave it unassigned \
+    to keep the mixdown out of the file.
+    """
+
+    static let multitrackMasterLeveler = """
+    The master leveler balances the final mix of all tracks after the individual tracks have \
+    been leveled. Broadcast Mode replaces the automatic behaviour with the loudness range \
+    parameters MaxLRA, MaxS and MaxM.
+    """
+
+    static let multitrackGates = """
+    Gating and crosstalk damping are only possible in multitrack productions, because they \
+    need all tracks of a recording at once.
+    """
+
+    static let multitrackGate = """
+    Automatically mutes tracks while their speaker is silent, which removes background noise \
+    and room tone from inactive microphones.
+    """
+
+    static let multitrackCrossgate = """
+    Reduces bleed of other speakers into a microphone: when a voice is only present because it \
+    leaks into another mic, that track is attenuated. Very effective for boom and lavalier \
+    microphones recorded in the same room.
+    """
+
     // MARK: Noise & Reverb Reduction
 
     static let denoise = """

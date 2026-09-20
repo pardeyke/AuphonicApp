@@ -161,6 +161,52 @@ final class ManualOptionsState {
         return settings
     }
 
+    /// Per-track `algorithms` of a multitrack production. Only the keys that
+    /// are valid inside `multi_input_files[]` are emitted — loudness
+    /// normalization and the leveler on/off switch belong to the master track.
+    func getMultitrackTrackSettings() -> [String: Any] {
+        var algorithms: [String: Any] = [:]
+        let compressorValues = ["auto", "soft", "medium", "hard", "off"]
+
+        if levelerEnabled {
+            if separateMS {
+                let classifierValues = ["on", "speech", "music"]
+                algorithms["msclassifier"] = classifierValues[classifier - 1]
+                algorithms["levelerstrength"] = speechStrength
+                algorithms["compressor"] = compressorValues[speechCompressor - 1]
+            } else {
+                algorithms["levelerstrength"] = levelerStrength
+                algorithms["compressor"] = compressorValues[compressor - 1]
+            }
+        } else {
+            algorithms["levelerstrength"] = 0
+            algorithms["compressor"] = "off"
+        }
+
+        if noiseEnabled {
+            algorithms["denoise"] = true
+            let methods = ["classic", "dynamic", "speech_isolation", "static"]
+            algorithms["denoisemethod"] = methods[noiseMethod - 1]
+            algorithms["denoiseamount"] = noiseAmount
+            if noiseMethod == 1 {
+                algorithms["dehum"] = dehum
+                algorithms["dehumamount"] = dehumAmount
+            }
+        } else {
+            algorithms["denoise"] = false
+        }
+
+        if filteringEnabled {
+            algorithms["filtering"] = true
+            let methods = ["hipfilter", "autoeq", "bwe"]
+            algorithms["filtermethod"] = methods[filteringMethod - 1]
+        } else {
+            algorithms["filtering"] = false
+        }
+
+        return algorithms
+    }
+
     func hasAnyEnabled() -> Bool {
         levelerEnabled || noiseEnabled || filteringEnabled || loudnessEnabled || outputFormatEnabled
     }
@@ -845,7 +891,7 @@ struct SliderRow: View {
     }
 }
 
-/// Parameter row with a checkbox
+/// Parameter row with a glass checkbox
 struct ToggleRow: View {
     let label: String
     let info: String
@@ -859,9 +905,7 @@ struct ToggleRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Toggle(label, isOn: $isOn)
-                .font(.system(size: 12))
-                .toggleStyle(.checkbox)
+            GlassCheckbox(label: label, isOn: $isOn)
 
             InfoButton(title: label, text: info)
 

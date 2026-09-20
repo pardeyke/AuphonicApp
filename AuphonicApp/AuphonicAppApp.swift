@@ -10,8 +10,8 @@ struct AuphonicAppApp: App {
         WindowGroup {
             ContentView()
         }
-        .windowResizability(.contentSize)
-        .defaultSize(width: 520, height: 700)
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: MainWindowSize.defaultWidth, height: MainWindowSize.defaultHeight)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Settings") {

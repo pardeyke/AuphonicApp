@@ -107,28 +107,60 @@ final class AuphonicAPIClient {
     }
 
     func uploadFile(productionUuid: String, file: URL, onProgress: (@Sendable (Double) -> Void)? = nil) async throws {
+        try await uploadFiles(productionUuid: productionUuid,
+                              files: [(fieldName: "input_file", file: file)],
+                              onProgress: onProgress)
+    }
+
+    /// Upload one or more files to a production. Multitrack productions use the
+    /// track id as the form field name; singletrack uses "input_file".
+    /// The multipart body is streamed to a temp file so large multichannel
+    /// takes never have to be held in memory.
+    func uploadFiles(
+        productionUuid: String,
+        files: [(fieldName: String, file: URL)],
+        onProgress: (@Sendable (Double) -> Void)? = nil
+    ) async throws {
+        guard !token.isEmpty else { throw APIError.noToken }
+
         let url = URL(string: "\(baseURL)/production/\(productionUuid)/upload.json")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 300
+        request.timeoutInterval = 1800
 
         let boundary = UUID().uuidString
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        let fileData = try Data(contentsOf: file)
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"input_file\"; filename=\"\(file.lastPathComponent)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
-        body.append(fileData)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-
-        // Write body to temp file for upload task (enables progress tracking)
         let tempBody = FileManager.default.temporaryDirectory
             .appendingPathComponent("auphonic_upload_\(UUID().uuidString).tmp")
-        try body.write(to: tempBody)
+        FileManager.default.createFile(atPath: tempBody.path, contents: nil)
+        guard let bodyHandle = try? FileHandle(forWritingTo: tempBody) else {
+            throw APIError.networkError("Could not stage upload body")
+        }
         defer { try? FileManager.default.removeItem(at: tempBody) }
+
+        do {
+            for entry in files {
+                var header = "--\(boundary)\r\n"
+                header += "Content-Disposition: form-data; name=\"\(entry.fieldName)\"; filename=\"\(entry.file.lastPathComponent)\"\r\n"
+                header += "Content-Type: application/octet-stream\r\n\r\n"
+                try bodyHandle.write(contentsOf: Data(header.utf8))
+
+                let source = try FileHandle(forReadingFrom: entry.file)
+                defer { try? source.close() }
+                while let chunk = try source.read(upToCount: 4 * 1024 * 1024), !chunk.isEmpty {
+                    try bodyHandle.write(contentsOf: chunk)
+                }
+
+                try bodyHandle.write(contentsOf: Data("\r\n".utf8))
+            }
+            try bodyHandle.write(contentsOf: Data("--\(boundary)--\r\n".utf8))
+            try bodyHandle.close()
+        } catch {
+            try? bodyHandle.close()
+            throw error
+        }
 
         let delegate = ProgressDelegate(onProgress: onProgress)
         let taskSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
@@ -136,6 +168,41 @@ final class AuphonicAPIClient {
 
         let (data, response) = try await taskSession.upload(for: request, fromFile: tempBody)
         try validateResponse(data: data, response: response)
+    }
+
+    // MARK: - Multitrack Productions
+
+    /// Create a multitrack production: every track is processed individually
+    /// (denoise, leveler, crosstalk damping) and mixed into one master.
+    func createMultitrackProduction(
+        trackIds: [String],
+        trackAlgorithms: [String: [String: Any]],
+        masterAlgorithms: [String: Any],
+        outputFiles: [[String: Any]],
+        title: String
+    ) async throws -> String {
+        var body: [String: Any] = [
+            "is_multitrack": true,
+            "title": title,
+            "output_basename": title,
+            "algorithms": masterAlgorithms,
+            "output_files": outputFiles
+        ]
+
+        body["multi_input_files"] = trackIds.map { id -> [String: Any] in
+            var track: [String: Any] = ["type": "multitrack", "id": id]
+            if let algorithms = trackAlgorithms[id] {
+                track["algorithms"] = algorithms
+            }
+            return track
+        }
+
+        let json = try await post("/productions.json", body: body)
+        guard let data = json["data"] as? [String: Any],
+              let uuid = data["uuid"] as? String else {
+            throw APIError.decodingError("Missing production UUID in response")
+        }
+        return uuid
     }
 
     func startProduction(productionUuid: String) async throws {
@@ -153,11 +220,16 @@ final class AuphonicAPIClient {
         let progress = (data["progress"] as? Double) ?? 0
         let errorMessage = (data["error_message"] as? String) ?? ""
 
-        var outputUrl = ""
-        if let outputFiles = data["output_files"] as? [[String: Any]],
-           let first = outputFiles.first,
-           let downloadUrl = first["download_url"] as? String {
-            outputUrl = downloadUrl
+        var files: [ProductionOutputFile] = []
+        if let outputFiles = data["output_files"] as? [[String: Any]] {
+            for entry in outputFiles {
+                guard let downloadUrl = entry["download_url"] as? String, !downloadUrl.isEmpty else { continue }
+                files.append(ProductionOutputFile(
+                    format: (entry["format"] as? String) ?? "",
+                    filename: (entry["filename"] as? String) ?? "",
+                    downloadUrl: downloadUrl
+                ))
+            }
         }
 
         return ProductionStatus(
@@ -165,7 +237,8 @@ final class AuphonicAPIClient {
             statusString: statusString,
             progress: progress,
             errorMessage: errorMessage,
-            outputFileUrl: outputUrl,
+            outputFileUrl: files.first?.downloadUrl ?? "",
+            outputFiles: files,
             uuid: productionUuid
         )
     }

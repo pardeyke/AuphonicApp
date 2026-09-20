@@ -121,6 +121,11 @@ final class BatchWorkflow {
             throw ChannelReplacerError.rf64NotSupported
         }
 
+        if config.productionMode == .multitrack {
+            try await processFileMultitrack(file, config: config, destination: destination)
+            return
+        }
+
         let jobs = config.uploadJobs
         guard !jobs.isEmpty else { return }
 
@@ -201,6 +206,236 @@ final class BatchWorkflow {
 
         file.progress = 1
         file.status = .done(outputURL)
+    }
+
+    // MARK: - Per File (Multitrack)
+
+    /// One multitrack production per file: every enabled channel is uploaded
+    /// as its own track, processed individually (denoise, leveler, crosstalk
+    /// damping) and — optionally — mixed down into one master.
+    private func processFileMultitrack(_ file: BatchFile, config: ChannelConfig, destination: URL) async throws {
+        let channels = config.enabledChannels
+        guard !channels.isEmpty else { return }
+
+        var tempFiles: [URL] = []
+        var workDirectories: [URL] = []
+        defer {
+            for temp in tempFiles where temp != file.url {
+                try? FileManager.default.removeItem(at: temp)
+            }
+            for directory in workDirectories {
+                try? FileManager.default.removeItem(at: directory)
+            }
+        }
+
+        // 1. Extract every enabled channel into its own mono file
+        file.status = .processing("Extracting \(channels.count) tracks…")
+        file.progress = 0
+
+        let source = file.url
+        let isFloat = file.isFloat
+        let bitDepth = file.bitDepth
+        let maxDuration = maxUploadDuration
+
+        var uploads: [(fieldName: String, file: URL)] = []
+        var trackIdsByChannel: [(channel: Int, trackId: String)] = []
+
+        for channel in channels {
+            try Task.checkCancellation()
+            let channelNumber = channel.id + 1
+            let extracted = try await Task.detached(priority: .userInitiated) {
+                try Self.extractChannels(
+                    from: source,
+                    channels: [channelNumber],
+                    isFloat: isFloat,
+                    bitDepth: bitDepth,
+                    maxDuration: maxDuration
+                )
+            }.value
+            tempFiles.append(extracted)
+
+            let trackId = config.trackId(for: channel)
+            // Auphonic names the exported files after the uploaded file names
+            let named = extracted.deletingLastPathComponent()
+                .appendingPathComponent("\(trackId).wav")
+            try? FileManager.default.moveItem(at: extracted, to: named)
+            let uploadURL = FileManager.default.fileExists(atPath: named.path) ? named : extracted
+            if uploadURL != extracted { tempFiles.append(uploadURL) }
+
+            uploads.append((fieldName: trackId, file: uploadURL))
+            trackIdsByChannel.append((channel: channelNumber, trackId: trackId))
+        }
+
+        // 2. Create the production
+        try Task.checkCancellation()
+        file.progress = 0.1
+        file.status = .processing("Creating multitrack production…")
+        let title = file.url.deletingPathExtension().lastPathComponent
+        let productionUuid = try await apiClient.createMultitrackProduction(
+            trackIds: trackIdsByChannel.map(\.trackId),
+            trackAlgorithms: config.multitrackTrackAlgorithms,
+            masterAlgorithms: config.masterOptions.getSettings(),
+            outputFiles: config.multitrackOutputFiles,
+            title: title
+        )
+
+        // 3. Upload all tracks in one request, then start
+        file.status = .processing("Uploading \(uploads.count) tracks…")
+        try await apiClient.uploadFiles(productionUuid: productionUuid, files: uploads) { [weak self] fraction in
+            Task { @MainActor in
+                guard let self, self.isRunning else { return }
+                file.progress = 0.1 + fraction * 0.35
+            }
+        }
+        try Task.checkCancellation()
+        try await apiClient.startProduction(productionUuid: productionUuid)
+
+        // 4. Poll
+        file.status = .processing("Processing multitrack production…")
+        let status = try await pollUntilDoneMultitrack(productionUuid: productionUuid, file: file)
+
+        // 5. Download the tracks archive (and the mixdown when requested)
+        guard let tracksFile = status.outputFiles.first(where: \.isTracksArchive) else {
+            throw AuphonicAPIClient.APIError.decodingError("Production returned no individual tracks")
+        }
+
+        file.status = .processing("Downloading tracks…")
+        let archive = try await apiClient.downloadFile(from: tracksFile.downloadUrl)
+        tempFiles.append(archive)
+
+        var mixdownFile: URL?
+        if config.downloadMixdown,
+           let mixdown = status.outputFiles.first(where: { !$0.isTracksArchive }) {
+            file.status = .processing("Downloading mixdown…")
+            let downloaded = try await apiClient.downloadFile(from: mixdown.downloadUrl)
+            tempFiles.append(downloaded)
+            mixdownFile = downloaded
+        }
+
+        // 6. Unpack the archive and map every track back to its channel
+        file.progress = 0.9
+        file.status = .processing("Writing output…")
+
+        let unpackDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("auphonic_tracks_\(UUID().uuidString)", isDirectory: true)
+        workDirectories.append(unpackDirectory)
+
+        let extractedTracks = try await Task.detached(priority: .userInitiated) {
+            try ZipArchive.extract(archive, to: unpackDirectory)
+        }.value
+
+        let ordered = Self.matchTracks(extractedTracks, to: trackIdsByChannel.map(\.trackId))
+        guard ordered.count == trackIdsByChannel.count else {
+            throw AuphonicAPIClient.APIError.decodingError(
+                "Tracks archive holds \(ordered.count) files for \(trackIdsByChannel.count) tracks")
+        }
+
+        var replacements: [(channelIndices: [Int], file: URL)] = []
+        for (index, entry) in trackIdsByChannel.enumerated() {
+            replacements.append((channelIndices: [entry.channel], file: ordered[index]))
+        }
+
+        // The mixdown replaces its target channel last, so it wins if the
+        // target is also processed as a track.
+        if let mixdownFile, let target = config.mixdownTargetChannel {
+            replacements.append((channelIndices: [target + 1], file: mixdownFile))
+        }
+
+        let outputURL = Self.resolveOutputURL(for: file.url, destination: destination)
+        let original = file.url
+        try await Task.detached(priority: .userInitiated) {
+            try ChannelReplacer.replaceChannels(
+                original: original,
+                output: outputURL,
+                replacements: replacements
+            )
+        }.value
+
+        if config.writeSettingsXml {
+            writeMultitrackSidecar(for: outputURL, config: config)
+        }
+
+        if deleteProductionsAfterDownload {
+            try? await apiClient.deleteProduction(uuid: productionUuid)
+        }
+
+        file.progress = 1
+        file.status = .done(outputURL)
+    }
+
+    /// Match the files inside Auphonic's tracks archive to the uploaded track
+    /// ids: by id first, then by the "Track N" numbering, then by name order.
+    nonisolated static func matchTracks(_ files: [URL], to trackIds: [String]) -> [URL] {
+        var remaining = files
+        var result: [URL?] = Array(repeating: nil, count: trackIds.count)
+
+        // 1. Exact/contained track id in the file name
+        for (index, trackId) in trackIds.enumerated() {
+            let needle = trackId.lowercased()
+            if let match = remaining.firstIndex(where: {
+                $0.deletingPathExtension().lastPathComponent.lowercased().contains(needle)
+            }) {
+                result[index] = remaining.remove(at: match)
+            }
+        }
+
+        // 2. "Track N" numbering (1-based, in upload order)
+        for (index, _) in trackIds.enumerated() where result[index] == nil {
+            let number = index + 1
+            if let match = remaining.firstIndex(where: { url in
+                let name = url.deletingPathExtension().lastPathComponent
+                guard let digits = name.range(of: "\\d+", options: .regularExpression) else { return false }
+                return Int(name[digits]) == number
+            }) {
+                result[index] = remaining.remove(at: match)
+            }
+        }
+
+        // 3. Whatever is left, in stable name order
+        remaining.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        for index in result.indices where result[index] == nil {
+            if remaining.isEmpty { break }
+            result[index] = remaining.removeFirst()
+        }
+
+        return result.compactMap { $0 }
+    }
+
+    private func pollUntilDoneMultitrack(productionUuid: String, file: BatchFile) async throws -> ProductionStatus {
+        let deadline = Date().addingTimeInterval(Self.pollTimeout)
+
+        while Date() < deadline {
+            try await Task.sleep(for: Self.pollInterval)
+
+            let status: ProductionStatus
+            do {
+                status = try await apiClient.getProductionStatus(productionUuid: productionUuid)
+            } catch {
+                continue    // tolerate transient poll errors
+            }
+
+            file.progress = 0.45 + min(1, max(0, status.progress)) * 0.4
+
+            if status.isDone { return status }
+            if status.isError {
+                let message = status.errorMessage.isEmpty ? "Processing failed" : status.errorMessage
+                throw AuphonicAPIClient.APIError.httpError(0, message)
+            }
+        }
+        throw AuphonicAPIClient.APIError.networkError("Timed out waiting for multitrack production")
+    }
+
+    private func writeMultitrackSidecar(for outputURL: URL, config: ChannelConfig) {
+        let payload: [String: Any] = [
+            "mode": "multitrack",
+            "master": config.masterOptions.getSettings(),
+            "tracks": config.multitrackTrackAlgorithms,
+            "output_files": config.multitrackOutputFiles
+        ]
+        let sidecarURL = outputURL.deletingPathExtension().appendingPathExtension("json")
+        if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: sidecarURL)
+        }
     }
 
     // MARK: - Per Upload Job

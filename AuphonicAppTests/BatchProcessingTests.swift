@@ -157,7 +157,7 @@ struct FileGrouperTests {
         defer { for f in [a, b] { try? FileManager.default.removeItem(at: f.url) } }
 
         let firstPass = FileGrouper.makeGroups(from: [a])
-        firstPass[0].config.packMonoChannels = false
+        firstPass[0].config.linkedSettings = false
         firstPass[0].config.channels[1].enabled = false
 
         let secondPass = FileGrouper.makeGroups(from: [a, b], previousGroups: firstPass)
@@ -165,7 +165,7 @@ struct FileGrouperTests {
         #expect(secondPass.count == 1)
         #expect(secondPass[0].files.count == 2)
         #expect(secondPass[0].config === firstPass[0].config)
-        #expect(secondPass[0].config.packMonoChannels == false)
+        #expect(secondPass[0].config.linkedSettings == false)
         #expect(secondPass[0].config.channels[1].enabled == false)
     }
 }

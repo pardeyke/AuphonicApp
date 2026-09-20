@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import AuphonicApp
 
-// MARK: - ChannelConfig / Upload Job Packing Tests
+// MARK: - ChannelConfig / Upload Job Tests
 
 struct ChannelConfigTests {
 
@@ -21,13 +21,6 @@ struct ChannelConfigTests {
         #expect(config.allSelected)
     }
 
-    @Test func twoChannelFileDefaultsToStereoPair() {
-        let config = makeConfig(channels: 2)
-        #expect(config.channels[0].stereoPairPartner == 1)
-        #expect(config.channels[1].stereoPairPartner == 0)
-        #expect(config.uploadJobs == [UploadJob(channelIndices: [1, 2])])
-    }
-
     @Test func trackNamesUsedInDisplayNames() {
         let config = ChannelConfig()
         config.configure(count: 3, trackNames: ["Boom", "", "Lav 1"], bitDepth: 24)
@@ -36,36 +29,24 @@ struct ChannelConfigTests {
         #expect(config.channels[2].displayName == "Ch 3 (Lav 1)")
     }
 
-    // MARK: Packing
+    // MARK: Upload Jobs — always one mono production per enabled channel
 
-    @Test func packingPairsChannelsAndLeavesOddMono() {
+    @Test func everyEnabledChannelBecomesAMonoUpload() {
         let config = makeConfig(channels: 5)
-        config.packMonoChannels = true
-        #expect(config.uploadJobs == [
-            UploadJob(channelIndices: [1, 2]),
-            UploadJob(channelIndices: [3, 4]),
-            UploadJob(channelIndices: [5]),
-        ])
-    }
-
-    @Test func packingDisabledUploadsEachChannelMono() {
-        let config = makeConfig(channels: 4)
-        config.packMonoChannels = false
         #expect(config.uploadJobs == [
             UploadJob(channelIndices: [1]),
             UploadJob(channelIndices: [2]),
             UploadJob(channelIndices: [3]),
             UploadJob(channelIndices: [4]),
+            UploadJob(channelIndices: [5]),
         ])
     }
 
-    @Test func userStereoPairStaysTogetherAndRestIsPacked() {
-        let config = makeConfig(channels: 5)
-        config.linkStereo(ch1: 0, ch2: 2)   // Ch 1 + Ch 3
+    @Test func twoChannelFilesAreAlsoProcessedAsMonoChannels() {
+        let config = makeConfig(channels: 2)
         #expect(config.uploadJobs == [
-            UploadJob(channelIndices: [1, 3]),
-            UploadJob(channelIndices: [2, 4]),
-            UploadJob(channelIndices: [5]),
+            UploadJob(channelIndices: [1]),
+            UploadJob(channelIndices: [2]),
         ])
     }
 
@@ -73,42 +54,17 @@ struct ChannelConfigTests {
         let config = makeConfig(channels: 4)
         config.channels[1].enabled = false
         #expect(config.uploadJobs == [
-            UploadJob(channelIndices: [1, 3]),
+            UploadJob(channelIndices: [1]),
+            UploadJob(channelIndices: [3]),
             UploadJob(channelIndices: [4]),
         ])
     }
 
-    @Test func onlyChannelsWithIdenticalSettingsShareAnUpload() {
-        let config = makeConfig(channels: 4)
-        config.linkedSettings = false
-
-        // Channel 3 gets different settings than the rest
-        config.channels[2].options.levelerEnabled = true
-
-        let jobs = config.uploadJobs
-        // Ch 1+2 share defaults, Ch 4 also default but odd one out, Ch 3 alone
-        #expect(jobs.contains(UploadJob(channelIndices: [1, 2])))
-        #expect(jobs.contains(UploadJob(channelIndices: [3])))
-        #expect(jobs.contains(UploadJob(channelIndices: [4])))
-        #expect(jobs.count == 3)
-    }
-
-    @Test func linkedSettingsPacksAcrossAllChannels() {
-        let config = makeConfig(channels: 4)
-        config.linkedSettings = true
-        // Differing per-channel options are irrelevant when linked
-        config.channels[0].options.levelerEnabled = true
-        #expect(config.uploadJobs == [
-            UploadJob(channelIndices: [1, 2]),
-            UploadJob(channelIndices: [3, 4]),
-        ])
-    }
-
-    @Test func apiCallCountMatchesJobs() {
+    @Test func apiCallCountMatchesEnabledChannels() {
         let config = makeConfig(channels: 8)
-        #expect(config.apiCallCount == 4)
-        config.packMonoChannels = false
         #expect(config.apiCallCount == 8)
+        config.deselectAll()
+        #expect(config.apiCallCount == 0)
     }
 
     // MARK: Settings
@@ -125,6 +81,15 @@ struct ChannelConfigTests {
         let config = makeConfig(channels: 3, bitDepth: 16)
         let settings = config.settingsForJob(config.uploadJobs[0])
         #expect(settings["output_format"] as? String == "wav-16bit")
+    }
+
+    @Test func unlinkedSettingsUseTheChannelsOwnOptions() {
+        let config = makeConfig(channels: 3)
+        config.linkedSettings = false
+        config.channels[1].options.levelerEnabled = true
+
+        #expect(config.optionsForJob(UploadJob(channelIndices: [2])) === config.channels[1].options)
+        #expect(config.optionsForJob(UploadJob(channelIndices: [1])) === config.channels[0].options)
     }
 
     @Test func presetOnlyUsedWhenLinkedAndUnmodified() {

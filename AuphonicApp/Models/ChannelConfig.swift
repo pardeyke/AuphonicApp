@@ -1,14 +1,14 @@
 import Foundation
 
-/// One Auphonic production for a file: one channel (mono upload) or two
-/// channels packed/paired into a stereo upload. Indices are 1-based.
+/// One Auphonic production for a file. Every selected channel is uploaded as
+/// its own mono production: Auphonic's singletrack algorithms are designed
+/// for finished mixes and do not process channels independently (confirmed by
+/// Auphonic support), so channels must never share an upload.
+/// Indices are 1-based.
 struct UploadJob: Equatable {
     let channelIndices: [Int]
 
-    var isStereo: Bool { channelIndices.count == 2 }
-    var isMono: Bool { channelIndices.count == 1 }
-
-    /// Short label like "Ch 3" or "Ch 3+5"
+    /// Short label like "Ch 3"
     var label: String {
         "Ch " + channelIndices.map(String.init).joined(separator: "+")
     }
@@ -19,7 +19,6 @@ struct UploadJob: Equatable {
 final class ChannelEntry: Identifiable {
     let id: Int                          // 0-based channel index
     var enabled: Bool = true
-    var stereoPairPartner: Int? = nil    // 0-based index of partner (nil = unpaired)
     var displayName: String
     let options: ManualOptionsState      // per-channel settings (used when !linkedSettings)
 
@@ -30,8 +29,25 @@ final class ChannelEntry: Identifiable {
     }
 }
 
-/// Per-group channel configuration: which channels are processed, how they are
-/// paired/packed into Auphonic uploads, and the processing settings.
+/// How a group's channels are sent to Auphonic
+enum ProductionMode: String, CaseIterable, Identifiable {
+    /// One singletrack production per channel
+    case singletrack
+    /// One multitrack production per file, every channel as its own track
+    case multitrack
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .singletrack: return "Singletrack"
+        case .multitrack: return "Multitrack"
+        }
+    }
+}
+
+/// Per-group channel configuration: which channels are processed and the
+/// processing settings.
 @Observable
 final class ChannelConfig {
     // File properties (set by configure())
@@ -42,12 +58,20 @@ final class ChannelConfig {
     // Channel state
     var channels: [ChannelEntry] = []
 
+    // Production mode (per group)
+    var productionMode: ProductionMode = .singletrack
+
+    // Multitrack: master/mix settings and mixdown handling
+    let masterOptions = MultitrackMasterOptions()
+
+    /// Also download the master mixdown (individual tracks are always exported)
+    var downloadMixdown: Bool = false
+
+    /// 0-based channel of the original file that the mixdown replaces
+    var mixdownTargetChannel: Int?
+
     // Settings mode
     var linkedSettings: Bool = true     // true = one shared ManualOptionsState for all channels
-
-    // Pack unpaired mono channels into stereo uploads. Auphonic bills by file
-    // duration regardless of channel count, so this halves the credit cost.
-    var packMonoChannels: Bool = true
 
     // Shared settings (used when linkedSettings == true)
     let sharedOptions = ManualOptionsState()
@@ -71,11 +95,6 @@ final class ChannelConfig {
             let name = channelDisplayName(index: idx, count: count, trackNames: trackNames)
             return ChannelEntry(id: idx, displayName: name)
         }
-
-        // 2-channel files default to a genuine stereo pair (L/R processed together)
-        if count == 2 {
-            linkStereo(ch1: 0, ch2: 1)
-        }
     }
 
     private func channelDisplayName(index: Int, count: Int, trackNames: [String]) -> String {
@@ -89,35 +108,6 @@ final class ChannelConfig {
             name = ""
         }
         return name.isEmpty ? "Ch \(ch)" : "Ch \(ch) (\(name))"
-    }
-
-    // MARK: - Stereo Pairing
-
-    func linkStereo(ch1: Int, ch2: Int) {
-        guard ch1 != ch2,
-              ch1 >= 0, ch1 < channels.count,
-              ch2 >= 0, ch2 < channels.count else { return }
-
-        // Unlink any existing pairs first
-        unlinkStereo(ch: ch1)
-        unlinkStereo(ch: ch2)
-
-        channels[ch1].stereoPairPartner = ch2
-        channels[ch2].stereoPairPartner = ch1
-
-        // Both must be enabled together
-        let enabled = channels[ch1].enabled || channels[ch2].enabled
-        channels[ch1].enabled = enabled
-        channels[ch2].enabled = enabled
-    }
-
-    func unlinkStereo(ch: Int) {
-        guard ch >= 0, ch < channels.count,
-              let partner = channels[ch].stereoPairPartner else { return }
-        channels[ch].stereoPairPartner = nil
-        if partner >= 0 && partner < channels.count {
-            channels[partner].stereoPairPartner = nil
-        }
     }
 
     // MARK: - Selection
@@ -138,85 +128,64 @@ final class ChannelConfig {
         channels.filter(\.enabled).count
     }
 
-    // MARK: - Upload Jobs (packing)
+    // MARK: - Upload Jobs
 
-    /// Number of Auphonic productions per file
+    /// Number of Auphonic productions per file: one per channel in
+    /// singletrack mode, exactly one in multitrack mode.
     var apiCallCount: Int {
-        uploadJobs.count
+        switch productionMode {
+        case .singletrack:
+            return uploadJobs.count
+        case .multitrack:
+            return uploadJobs.isEmpty ? 0 : 1
+        }
     }
 
-    /// Build the upload jobs for one file of this group.
-    ///
-    /// - User-defined stereo pairs always become one stereo upload.
-    /// - Remaining enabled channels are packed two-per-upload when
-    ///   `packMonoChannels` is on — but only channels with identical settings
-    ///   can share an upload, since a production has a single settings set.
+    /// One mono upload per enabled channel. In multitrack mode these become
+    /// the tracks of a single production.
     var uploadJobs: [UploadJob] {
-        var jobs: [UploadJob] = []
-        var visited = Set<Int>()
-        var loose: [ChannelEntry] = []      // enabled, unpaired channels
-
-        for ch in channels where ch.enabled && !visited.contains(ch.id) {
-            visited.insert(ch.id)
-
-            if let partner = ch.stereoPairPartner,
-               partner < channels.count, channels[partner].enabled {
-                visited.insert(partner)
-                let indices = [min(ch.id, partner) + 1, max(ch.id, partner) + 1]
-                jobs.append(UploadJob(channelIndices: indices))
-            } else {
-                loose.append(ch)
-            }
-        }
-
-        if packMonoChannels {
-            // Bucket by settings signature: only identical settings may share a production
-            var buckets: [String: [ChannelEntry]] = [:]
-            var bucketOrder: [String] = []
-            for ch in loose {
-                let key = linkedSettings ? "linked" : settingsSignature(for: ch)
-                if buckets[key] == nil { bucketOrder.append(key) }
-                buckets[key, default: []].append(ch)
-            }
-
-            for key in bucketOrder {
-                let bucket = buckets[key] ?? []
-                var i = 0
-                while i + 1 < bucket.count {
-                    jobs.append(UploadJob(channelIndices: [bucket[i].id + 1, bucket[i + 1].id + 1]))
-                    i += 2
-                }
-                if i < bucket.count {
-                    jobs.append(UploadJob(channelIndices: [bucket[i].id + 1]))
-                }
-            }
-        } else {
-            for ch in loose {
-                jobs.append(UploadJob(channelIndices: [ch.id + 1]))
-            }
-        }
-
-        return jobs
+        channels
+            .filter(\.enabled)
+            .map { UploadJob(channelIndices: [$0.id + 1]) }
     }
 
-    /// Canonical serialization of a channel's settings, used to decide which
-    /// channels may be packed into the same upload.
-    private func settingsSignature(for channel: ChannelEntry) -> String {
-        let settings = channel.options.getSettings()
-        guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]),
-              let string = String(data: data, encoding: .utf8) else {
-            return "ch\(channel.id)"    // unpackable fallback: unique bucket
-        }
-        return string
+    /// Enabled channels in channel order
+    var enabledChannels: [ChannelEntry] {
+        channels.filter(\.enabled)
     }
 
-    /// Get channels that are linkable as stereo pair for a given channel
-    func availableStereoPartners(for channelId: Int) -> [ChannelEntry] {
-        channels.filter { ch in
-            ch.id != channelId &&
-            ch.enabled &&
-            ch.stereoPairPartner == nil
+    // MARK: - Multitrack
+
+    /// Stable track id for a channel, used as the multipart field name and to
+    /// match the files inside Auphonic's tracks archive.
+    func trackId(for channel: ChannelEntry) -> String {
+        let name = channel.displayName
+            .replacingOccurrences(of: "[^A-Za-z0-9]+", with: "_", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return name.isEmpty ? "ch\(channel.id + 1)" : name
+    }
+
+    /// Per-track `algorithms`, keyed by track id
+    var multitrackTrackAlgorithms: [String: [String: Any]] {
+        var result: [String: [String: Any]] = [:]
+        for channel in enabledChannels {
+            let options = linkedSettings ? sharedOptions : channel.options
+            result[trackId(for: channel)] = options.getMultitrackTrackSettings()
         }
+        return result
+    }
+
+    /// `output_files` for a multitrack production: the individual tracks
+    /// archive, plus the mono mixdown when requested.
+    var multitrackOutputFiles: [[String: Any]] {
+        var files: [[String: Any]] = [["format": "tracks", "ending": "wav.zip"]]
+        if downloadMixdown {
+            files.append([
+                "format": forcedWavFormat,
+                "mono_mixdown": true
+            ])
+        }
+        return files
     }
 
     // MARK: - Settings Retrieval
@@ -263,6 +232,11 @@ final class ChannelConfig {
     /// Whether the current configuration has anything to process
     var hasValidJobConfiguration: Bool {
         guard !uploadJobs.isEmpty else { return false }
+
+        // Multitrack always processes (master leveler, gate and crosstalk
+        // damping apply even when no per-track algorithm is enabled)
+        if productionMode == .multitrack { return true }
+
         if linkedSettings {
             let preset = presetModified ? "" : selectedPresetUuid
             return !preset.isEmpty || sharedOptions.hasAnyAlgorithmEnabled()

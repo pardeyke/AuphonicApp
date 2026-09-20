@@ -17,13 +17,51 @@ struct UserCredits {
     }
 }
 
+/// One result file of a production (mixdown, individual-tracks zip, ...)
+struct ProductionOutputFile {
+    let format: String          // e.g. "wav-24bit", "tracks"
+    let filename: String
+    let downloadUrl: String
+
+    /// True for the zipped individual tracks of a multitrack production
+    var isTracksArchive: Bool {
+        format == "tracks" || filename.lowercased().hasSuffix(".zip")
+    }
+}
+
+/// One input track of a multitrack production
+struct MultitrackTrackSpec {
+    let id: String                      // form field name used for the upload
+    let file: URL
+    let algorithms: [String: Any]
+}
+
 struct ProductionStatus {
     let statusCode: Int
     let statusString: String
     let progress: Double       // 0.0 - 1.0
     let errorMessage: String
     let outputFileUrl: String
+    let outputFiles: [ProductionOutputFile]
     let uuid: String
+
+    init(
+        statusCode: Int,
+        statusString: String,
+        progress: Double,
+        errorMessage: String,
+        outputFileUrl: String,
+        outputFiles: [ProductionOutputFile] = [],
+        uuid: String
+    ) {
+        self.statusCode = statusCode
+        self.statusString = statusString
+        self.progress = progress
+        self.errorMessage = errorMessage
+        self.outputFileUrl = outputFileUrl
+        self.outputFiles = outputFiles
+        self.uuid = uuid
+    }
 
     var isDone: Bool { statusCode == 3 }
     var isError: Bool { statusCode >= 9 }

@@ -26,6 +26,8 @@ final class AppViewModel {
     var savePresetName = ""
     var alertMessage = ""
     var showingAlert = false
+    /// Adds an "Open Settings…" button to the alert (missing API token)
+    var alertOffersSettings = false
 
     // Processing
     private(set) var workflow: BatchWorkflow?
@@ -190,7 +192,7 @@ final class AppViewModel {
             return
         }
         guard settingsManager.hasApiToken else {
-            showAlert("Please enter your API token in Settings.")
+            showAlert("Add your Auphonic API token to start processing.", offersSettings: true)
             return
         }
 
@@ -231,7 +233,7 @@ final class AppViewModel {
     func testSettings() {
         guard !isProcessing else { return }
         guard settingsManager.hasApiToken else {
-            showAlert("Please enter your API token in Settings.")
+            showAlert("Add your Auphonic API token to start processing.", offersSettings: true)
             return
         }
         guard let group = selectedGroup else {
@@ -280,15 +282,16 @@ final class AppViewModel {
 
     // MARK: - Credit Estimate
 
-    /// Billed seconds for the whole batch: one production per upload job,
-    /// each billed at the file duration with Auphonic's 3-minute minimum.
+    /// Billed seconds for the whole batch. Singletrack bills one production
+    /// per channel, multitrack one production per file - each at the file
+    /// duration with Auphonic's 3-minute minimum.
     var estimatedCostSeconds: Double {
         let minimumBilled = 180.0
         return groups.reduce(0) { total, group in
             guard group.config.hasValidJobConfiguration else { return total }
-            let jobCount = Double(group.config.uploadJobs.count)
+            let productionsPerFile = Double(group.config.apiCallCount)
             let groupCost = group.files.reduce(0) { sum, file in
-                sum + jobCount * max(file.duration, minimumBilled)
+                sum + productionsPerFile * max(file.duration, minimumBilled)
             }
             return total + groupCost
         }
@@ -298,7 +301,7 @@ final class AppViewModel {
     var totalApiCallCount: Int {
         groups.reduce(0) { total, group in
             guard group.config.hasValidJobConfiguration else { return total }
-            return total + group.config.uploadJobs.count * group.files.count
+            return total + group.config.apiCallCount * group.files.count
         }
     }
 
@@ -334,8 +337,9 @@ final class AppViewModel {
 
     // MARK: - Alert
 
-    func showAlert(_ message: String) {
+    func showAlert(_ message: String, offersSettings: Bool = false) {
         alertMessage = message
+        alertOffersSettings = offersSettings
         showingAlert = true
     }
 }

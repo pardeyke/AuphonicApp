@@ -5,9 +5,18 @@ import Accelerate
 
 @Observable
 final class AudioPlayerService {
-    enum Slot {
+    enum Slot: String, CaseIterable, Identifiable {
         case original
         case processed
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .original: return "Original"
+            case .processed: return "Processed"
+            }
+        }
     }
 
     private(set) var isPlaying = false
@@ -26,13 +35,16 @@ final class AudioPlayerService {
     private(set) var startTimecodeSamples: UInt64?
     private(set) var timecodeRate: Double?
 
-    // Cached per-channel waveforms (key: channel index, 0=all)
-    private var waveformCacheA: [Int: [Float]] = [:]
-    private var waveformCacheB: [Int: [Float]] = [:]
+    // Cached per-channel waveforms (key: channel index, 0=all, 1-N = channel)
+    private(set) var waveformCacheA: [Int: [Float]] = [:]
+    private(set) var waveformCacheB: [Int: [Float]] = [:]
 
-    // Channel solo (0 = all, 1-N = solo that channel)
-    private(set) var soloChannelA: Int = 0
-    private(set) var soloChannelB: Int = 0
+    // Mixer state per slot: 1-based channel numbers
+    private(set) var mutedChannelsA: Set<Int> = []
+    private(set) var mutedChannelsB: Set<Int> = []
+    private(set) var soloedChannelsA: Set<Int> = []
+    private(set) var soloedChannelsB: Set<Int> = []
+
     private(set) var channelCountA: Int = 0
     private(set) var channelCountB: Int = 0
     private(set) var trackNamesA: [String] = []
@@ -67,7 +79,8 @@ final class AudioPlayerService {
 
     func loadOriginal(url: URL) {
         stop()
-        soloChannelA = 0
+        mutedChannelsA = []
+        soloedChannelsA = []
         startTimecodeSamples = nil
         timecodeRate = nil
         do {
@@ -90,7 +103,8 @@ final class AudioPlayerService {
     }
 
     func loadProcessed(url: URL) {
-        soloChannelB = 0
+        mutedChannelsB = []
+        soloedChannelsB = []
         do {
             let file = try AVAudioFile(forReading: url)
             audioFileB = file
@@ -142,7 +156,8 @@ final class AudioPlayerService {
         processedWaveform = []
         waveformCacheB = [:]
         channelCountB = 0
-        soloChannelB = 0
+        mutedChannelsB = []
+        soloedChannelsB = []
         trackNamesB = []
     }
 
@@ -255,18 +270,31 @@ final class AudioPlayerService {
 
         let frames = Int(srcBuffer.frameLength)
         let srcChannels = Int(srcFormat.channelCount)
-        let solo = activeSlot == .original ? soloChannelA : soloChannelB
         let byteCount = frames * MemoryLayout<Float>.size
 
-        if solo > 0 && (solo - 1) < srcChannels {
-            // Solo: copy chosen channel to both L and R
-            let chIdx = solo - 1
-            memcpy(outData[0], srcData[chIdx], byteCount)
-            memcpy(outData[1], srcData[chIdx], byteCount)
+        // Mix every audible channel (mute/solo aware) down to the stereo bus
+        let audible = (1...max(1, srcChannels)).filter {
+            $0 <= srcChannels && isChannelAudible(slot: activeSlot, channel: $0)
+        }
+
+        // Always a mono sum — these are separate mics, not a stereo image, so
+        // monitoring them panned would be misleading.
+        if audible.isEmpty {
+            // Everything muted — output silence rather than the raw file
+            memset(outData[0], 0, byteCount)
+            memset(outData[1], 0, byteCount)
+        } else if audible.count == 1 {
+            let source = srcData[audible[0] - 1]
+            memcpy(outData[0], source, byteCount)
+            memcpy(outData[1], source, byteCount)
         } else {
-            // All: copy ch0→L, ch1→R (mono: duplicate)
-            memcpy(outData[0], srcData[0], byteCount)
-            memcpy(outData[1], srcChannels > 1 ? srcData[1] : srcData[0], byteCount)
+            // Sum to the centre, attenuated so a full mix can't clip
+            let gain = 1 / Float(audible.count).squareRoot()
+            memset(outData[0], 0, byteCount)
+            for channel in audible {
+                vDSP_vsma(srcData[channel - 1], 1, [gain], outData[0], 1, outData[0], 1, vDSP_Length(frames))
+            }
+            memcpy(outData[1], outData[0], byteCount)
         }
 
         nextReadFrame += AVAudioFramePosition(count)
@@ -368,30 +396,69 @@ final class AudioPlayerService {
         switchTo(activeSlot == .original ? .processed : .original)
     }
 
-    // MARK: - Channel Solo (instant re-stream)
+    // MARK: - Channel Mixer (mute / solo, applied without a gap)
 
-    func setSoloChannel(slot: Slot, channel: Int) {
+    /// A channel is heard when it isn't muted and — if anything is soloed in
+    /// its slot — it is one of the soloed channels.
+    func isChannelAudible(slot: Slot, channel: Int) -> Bool {
+        let muted = slot == .original ? mutedChannelsA : mutedChannelsB
+        let soloed = slot == .original ? soloedChannelsA : soloedChannelsB
+        if muted.contains(channel) { return false }
+        return soloed.isEmpty || soloed.contains(channel)
+    }
+
+    func isChannelMuted(slot: Slot, channel: Int) -> Bool {
+        (slot == .original ? mutedChannelsA : mutedChannelsB).contains(channel)
+    }
+
+    func isChannelSoloed(slot: Slot, channel: Int) -> Bool {
+        (slot == .original ? soloedChannelsA : soloedChannelsB).contains(channel)
+    }
+
+    func toggleMute(slot: Slot, channel: Int) {
         if slot == .original {
-            soloChannelA = channel
-            if let cached = waveformCacheA[channel] {
-                originalWaveform = cached
-            }
+            mutedChannelsA.formSymmetricDifference([channel])
         } else {
-            soloChannelB = channel
-            if let cached = waveformCacheB[channel] {
-                processedWaveform = cached
-            }
+            mutedChannelsB.formSymmetricDifference([channel])
         }
+        restreamIfPlaying(slot: slot)
+    }
 
-        // If this is the active slot and playing, restart stream with new solo
-        if slot == activeSlot && isPlaying {
-            let pos = currentFrame
-            stopStreaming()
-            activeNode.stop()
-            lastSeekFrame = pos
-            startStreaming(from: pos)
-            activeNode.play()
+    func toggleSolo(slot: Slot, channel: Int) {
+        if slot == .original {
+            soloedChannelsA.formSymmetricDifference([channel])
+        } else {
+            soloedChannelsB.formSymmetricDifference([channel])
         }
+        restreamIfPlaying(slot: slot)
+    }
+
+    func clearMixerState(slot: Slot) {
+        if slot == .original {
+            mutedChannelsA = []
+            soloedChannelsA = []
+        } else {
+            mutedChannelsB = []
+            soloedChannelsB = []
+        }
+        restreamIfPlaying(slot: slot)
+    }
+
+    /// Per-channel peak waveform (1-based; 0 = summed overview)
+    func waveform(slot: Slot, channel: Int) -> [Float] {
+        (slot == .original ? waveformCacheA : waveformCacheB)[channel] ?? []
+    }
+
+    /// Re-schedule the stream from the current position so mixer changes are
+    /// heard immediately instead of after the buffered chunks drain.
+    private func restreamIfPlaying(slot: Slot) {
+        guard slot == activeSlot, isPlaying else { return }
+        let position = currentFrame
+        stopStreaming()
+        activeNode.stop()
+        lastSeekFrame = position
+        startStreaming(from: position)
+        activeNode.play()
     }
 
     // MARK: - Active helpers
@@ -548,13 +615,12 @@ final class AudioPlayerService {
 
         // Check cache first
         if let cached = Self.waveformDiskCache[url] {
-            let activeChannel = slot == .original ? soloChannelA : soloChannelB
             if slot == .original {
                 waveformCacheA = cached
-                originalWaveform = cached[activeChannel] ?? cached[0] ?? []
+                originalWaveform = cached[0] ?? []
             } else {
                 waveformCacheB = cached
-                processedWaveform = cached[activeChannel] ?? cached[0] ?? []
+                processedWaveform = cached[0] ?? []
             }
             return
         }
@@ -567,14 +633,12 @@ final class AudioPlayerService {
                 Self.waveformDiskCache[url] = waveforms
             }
 
-            let activeChannel = slot == .original ? self.soloChannelA : self.soloChannelB
-
             if slot == .original {
                 self.waveformCacheA = waveforms
-                self.originalWaveform = waveforms[activeChannel] ?? waveforms[0] ?? []
+                self.originalWaveform = waveforms[0] ?? []
             } else {
                 self.waveformCacheB = waveforms
-                self.processedWaveform = waveforms[activeChannel] ?? waveforms[0] ?? []
+                self.processedWaveform = waveforms[0] ?? []
             }
         }
 
