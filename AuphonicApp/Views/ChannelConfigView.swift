@@ -170,15 +170,52 @@ struct ChannelConfigView: View {
     private var trackSettingsColumn: some View {
         VStack(alignment: .leading, spacing: 8) {
             SettingsGroupLabel(text: "Track settings")
+            if config.productionMode == .multitrack {
+                trackExportDisclaimer
+            }
             settingsContent
+        }
+    }
+
+    /// Auphonic currently returns the individual tracks of a multitrack
+    /// production as 16-bit WAV, so the level should already be right on
+    /// download — gaining a quiet 16-bit track up in the DAW lifts its noise
+    /// floor with it.
+    private var trackExportDisclaimer: some View {
+        hint("In multitrack mode Auphonic exports the individual tracks as 16-bit WAV only — 24-bit is not available. Enable the Adaptive Leveler so the tracks come back at a usable level instead of being gained up later, which would raise the 16-bit noise floor.")
+    }
+
+    /// Warning note that wraps into the column instead of widening it
+    private func hint(_ text: String) -> some View {
+        HintWidth {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange)
+
+                Text(text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
         }
     }
 
     private var masterColumn: some View {
         VStack(alignment: .leading, spacing: 8) {
             SettingsGroupLabel(text: "Master & mixdown")
+            masterDisclaimer
             MultitrackOptionsView(config: config, onChange: onChange)
         }
+    }
+
+    /// The master algorithms are not limited to the mixdown: Auphonic applies
+    /// them while mastering, so the exported individual tracks change too —
+    /// even when the mixdown itself is never downloaded.
+    private var masterDisclaimer: some View {
+        hint("These master settings also affect the exported individual tracks, not only the mixdown — even if the mixdown is not downloaded. Leave them all off to only process the individual tracks.")
     }
 
     @ViewBuilder
@@ -227,6 +264,30 @@ struct ChannelConfigView: View {
                 )
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Wraps long hint text into whatever width it is given without claiming any
+/// width of its own: a `Text`'s ideal width is its full single line, which
+/// would widen the settings column and make `ViewThatFits` drop the
+/// side-by-side layout.
+struct HintWidth: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+
+        // Ideal measurement (no width proposed): take up no space so the
+        // column keeps the width its controls need.
+        guard let width = proposal.width, width > 0, width < .infinity else { return .zero }
+
+        let height = subview.sizeThatFits(ProposedViewSize(width: width, height: nil)).height
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(
+            at: bounds.origin,
+            proposal: ProposedViewSize(width: bounds.width, height: nil)
+        )
     }
 }
 

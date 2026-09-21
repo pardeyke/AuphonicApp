@@ -210,6 +210,34 @@ struct ManualOptionsStateTests {
         #expect(alg["filtermethod"] as? String == "bwe")
     }
 
+    @Test func getSettingsFilteringStudioVoice() {
+        let opts = ManualOptionsState()
+        opts.filteringEnabled = true
+        opts.filteringMethod = 4
+        let settings = opts.getSettings()
+        let alg = settings["algorithms"] as! [String: Any]
+        #expect(alg["filtermethod"] as? String == "studiovoice")
+    }
+
+    /// Per-track algorithms of a multitrack production take the same enum
+    @Test func multitrackTrackSettingsUseStudioVoice() {
+        let opts = ManualOptionsState()
+        opts.filteringEnabled = true
+        opts.filteringMethod = 4
+        let alg = opts.getMultitrackTrackSettings()
+        #expect(alg["filtering"] as? Bool == true)
+        #expect(alg["filtermethod"] as? String == "studiovoice")
+    }
+
+    /// An unknown method must not crash or pick a random filter
+    @Test func unknownFilterMethodFallsBackToHighPass() {
+        let opts = ManualOptionsState()
+        opts.filteringEnabled = true
+        opts.filteringMethod = 99
+        let alg = opts.getSettings()["algorithms"] as! [String: Any]
+        #expect(alg["filtermethod"] as? String == "hipfilter")
+    }
+
     // MARK: - getSettings (Loudness)
 
     @Test func getSettingsLoudnessEnabled() {
@@ -408,6 +436,16 @@ struct ManualOptionsStateTests {
         ])
         #expect(opts.filteringEnabled)
         #expect(opts.filteringMethod == 2)
+    }
+
+    @Test func applyApiSettingsStudioVoice() {
+        let opts = ManualOptionsState()
+        opts.applyApiSettings([
+            "filtering": true,
+            "filtermethod": "studiovoice"
+        ])
+        #expect(opts.filteringEnabled)
+        #expect(opts.filteringMethod == 4)
     }
 
     @Test func applyApiSettingsLoudness() {

@@ -29,7 +29,7 @@ final class ManualOptionsState {
 
     // Filtering
     var filteringEnabled = false
-    var filteringMethod = 1         // 1=High-Pass, 2=Auto EQ, 3=Bandwidth Extension
+    var filteringMethod = 1         // 1=High-Pass, 2=Auto EQ, 3=Bandwidth Extension, 4=Studio Voice
 
     // Loudness
     var loudnessEnabled = false
@@ -61,6 +61,16 @@ final class ManualOptionsState {
     var effectivePreviewDuration: Double {
         guard previewEnabled else { return 0 }
         return previewDuration
+    }
+
+    /// `filtermethod` values in picker order — same enum for singletrack
+    /// productions and for the per-track algorithms of a multitrack production.
+    static let filterMethods = ["hipfilter", "autoeq", "bwe", "studiovoice"]
+
+    private var filterMethodValue: String {
+        let index = filteringMethod - 1
+        guard Self.filterMethods.indices.contains(index) else { return "hipfilter" }
+        return Self.filterMethods[index]
     }
 
     func getSettings() -> [String: Any] {
@@ -124,8 +134,7 @@ final class ManualOptionsState {
 
         if filteringEnabled {
             algorithms["filtering"] = true
-            let methods = ["hipfilter", "autoeq", "bwe"]
-            algorithms["filtermethod"] = methods[filteringMethod - 1]
+            algorithms["filtermethod"] = filterMethodValue
         } else {
             algorithms["filtering"] = false
         }
@@ -198,8 +207,7 @@ final class ManualOptionsState {
 
         if filteringEnabled {
             algorithms["filtering"] = true
-            let methods = ["hipfilter", "autoeq", "bwe"]
-            algorithms["filtermethod"] = methods[filteringMethod - 1]
+            algorithms["filtermethod"] = filterMethodValue
         } else {
             algorithms["filtering"] = false
         }
@@ -364,8 +372,7 @@ final class ManualOptionsState {
         if let filtering = algorithms["filtering"] as? Bool, filtering {
             filteringEnabled = true
             if let method = algorithms["filtermethod"] as? String {
-                let methods = ["hipfilter": 1, "autoeq": 2, "bwe": 3]
-                filteringMethod = methods[method] ?? 1
+                filteringMethod = (Self.filterMethods.firstIndex(of: method) ?? 0) + 1
             }
         } else {
             filteringEnabled = false
@@ -413,11 +420,12 @@ struct ManualOptionsView: View {
     private let maxPeakValues: [Double] = [0, -0.5, -1, -1.5, -2, -3, -4, -5, -6]
 
     var body: some View {
+        // Signal-chain order: clean up first, then level and normalize
         VStack(alignment: .leading, spacing: 10) {
+            noiseCard
+            filteringCard
             levelerCard
             loudnessCard
-            filteringCard
-            noiseCard
         }
     }
 
@@ -604,6 +612,7 @@ struct ManualOptionsView: View {
                 Text("Adaptive High-Pass Filter").tag(1)
                 Text("Voice AutoEQ").tag(2)
                 Text("Voice AutoEQ + Bandwidth Extension").tag(3)
+                Text("Studio Voice (beta)").tag(4)
             }
         }
     }

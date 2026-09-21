@@ -109,6 +109,14 @@ enum AlgorithmInfo {
     Voice AutoEQ + Bandwidth Extension additionally recovers lost high frequencies in archival \
     or low-bitrate speech recordings — it is optimized for speech and does not enhance music, \
     noise, reverb or other environmental sounds.
+
+    Studio Voice is Auphonic's most extensive voice enhancement model: instead of only \
+    filtering the audio it reconstructs a clear, studio-quality voice. It repairs codec and \
+    compression artifacts of low-bitrate recordings, distorted or clipped voices from \
+    overdriven microphones, recreates missing high frequencies with an improved bandwidth \
+    extension model and removes artifacts left by denoisers, text-to-speech or other voice \
+    processors. Auphonic labels it beta — the model is still being improved and problems can \
+    appear on some recordings, so check the result before using it on a whole batch.
     """
 
     // MARK: Multitrack
