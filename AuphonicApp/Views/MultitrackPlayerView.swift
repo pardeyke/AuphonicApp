@@ -80,15 +80,14 @@ struct MultitrackPlayerView: View {
 
             // A/B between the original and the processed result
             if player.hasProcessed {
-                TabsSegmentedControl(
+                TabsPicker(
                     values: AudioPlayerService.Slot.allCases,
                     titles: AudioPlayerService.Slot.allCases.map(\.displayName),
                     selection: Binding(
                         get: { player.activeSlot },
                         set: { player.switchTo($0) }
                     ),
-                    controlSize: .regular,
-                    height: 34
+                    controlSize: .regular
                 )
                 .fixedSize()
             }

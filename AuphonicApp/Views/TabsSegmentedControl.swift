@@ -15,9 +15,73 @@ final class HeightAdjustableSegmentedControl: NSSegmentedControl {
     }
 }
 
-/// The system segmented control in its "tabs" role, which is what gives it the
-/// Liquid Glass capsule treatment on macOS 27. SwiftUI's `.segmented` picker
-/// style still renders the classic bordered control, so this bridges to AppKit.
+/// Liquid Glass tabs picker: the capsule with a sliding indicator.
+///
+/// macOS 27 ships this natively as `.pickerStyle(.tabs)`. The deployment
+/// target is 26.2, where SwiftUI's `.segmented` style still renders the
+/// classic bordered control, so 26 falls back to the AppKit bridge below.
+struct TabsPicker<Value: Hashable>: View {
+    let values: [Value]
+    let titles: [String]
+    @Binding var selection: Value
+    /// Size on 27 (`nil` inherits, e.g. from the toolbar); the AppKit fallback
+    /// derives its control size and height from it.
+    var controlSize: ControlSize? = nil
+
+    var body: some View {
+        if #available(macOS 27.0, *) {
+            Picker("", selection: $selection) {
+                ForEach(values.indices, id: \.self) { index in
+                    Text(titles[index]).tag(values[index])
+                }
+            }
+            .pickerStyle(.tabs)
+            .labelsHidden()
+            .modifier(OptionalControlSize(size: controlSize))
+        } else {
+            TabsSegmentedControl(
+                values: values,
+                titles: titles,
+                selection: $selection,
+                controlSize: fallbackControlSize,
+                height: fallbackHeight
+            )
+        }
+    }
+
+    private var fallbackControlSize: NSControl.ControlSize {
+        switch controlSize {
+        case .large: return .large
+        case .small: return .small
+        case .mini: return .mini
+        default: return .regular
+        }
+    }
+
+    private var fallbackHeight: CGFloat {
+        switch controlSize {
+        case .large: return 44
+        case .small, .mini: return 24
+        default: return 28
+        }
+    }
+}
+
+private struct OptionalControlSize: ViewModifier {
+    let size: ControlSize?
+
+    func body(content: Content) -> some View {
+        if let size {
+            content.controlSize(size)
+        } else {
+            content
+        }
+    }
+}
+
+/// AppKit fallback for macOS 26: the system segmented control with a capsule
+/// border. On 27 the same control gets the tabs role, but there `TabsPicker`
+/// uses the SwiftUI style instead.
 struct TabsSegmentedControl<Value: Hashable>: NSViewRepresentable {
     let values: [Value]
     let titles: [String]

@@ -31,11 +31,10 @@ struct ContentView: View {
         )
         .toolbar {
             ToolbarItem(placement: .principal) {
-                TabsSegmentedControl(
+                TabsPicker(
                     values: AppMode.allCases,
                     titles: AppMode.allCases.map(\.displayName),
-                    selection: $viewModel.mode,
-                    height: 28
+                    selection: $viewModel.mode
                 )
                 .fixedSize()
                 .help(viewModel.mode.summary)

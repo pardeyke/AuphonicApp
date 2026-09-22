@@ -43,14 +43,14 @@ struct ChannelConfigView: View {
 
     private var header: some View {
         SectionHeading(title: "Group Processing") {
-            TabsSegmentedControl(
+            TabsPicker(
                 values: ProductionMode.allCases,
                 titles: ProductionMode.allCases.map(\.displayName),
                 selection: Binding(
                     get: { config.productionMode },
                     set: { config.productionMode = $0; onChange?() }
                 ),
-                height: 44
+                controlSize: .large
             )
             .fixedSize()
 
