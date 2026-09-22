@@ -6,9 +6,9 @@ import Foundation
 
 struct ProductionModeTests {
 
-    private func makeConfig(channels: Int, bitDepth: Int = 24) -> ChannelConfig {
+    private func makeConfig(channels: Int) -> ChannelConfig {
         let config = ChannelConfig()
-        config.configure(count: channels, trackNames: ["BOOM", "LAVMIX", "LAV1", "LAV2"], bitDepth: bitDepth)
+        config.configure(count: channels, trackNames: ["BOOM", "LAVMIX", "LAV1", "LAV2"])
         return config
     }
 
@@ -50,17 +50,17 @@ struct ProductionModeTests {
 
     @Test func multitrackAlwaysRequestsIndividualTracks() {
         let config = makeConfig(channels: 2)
-        let files = config.multitrackOutputFiles
+        let files = config.multitrackOutputFiles(bitDepth: 24)
         #expect(files.count == 1)
         #expect(files[0]["format"] as? String == "tracks")
         #expect(files[0]["ending"] as? String == "wav.zip")
     }
 
     @Test func mixdownIsRequestedAsMonoWhenEnabled() {
-        let config = makeConfig(channels: 2, bitDepth: 32)
+        let config = makeConfig(channels: 2)
         config.downloadMixdown = true
 
-        let files = config.multitrackOutputFiles
+        let files = config.multitrackOutputFiles(bitDepth: 32)
         #expect(files.count == 2)
 
         let mixdown = files[1]

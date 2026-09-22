@@ -98,8 +98,7 @@ final class FileGroup: Identifiable {
             let namedFile = files.first { !$0.trackNames.isEmpty }
             config.configure(
                 count: channelCount,
-                trackNames: namedFile?.trackNames ?? [],
-                bitDepth: files.first?.bitDepth ?? 24
+                trackNames: namedFile?.trackNames ?? []
             )
             self.config = config
         }

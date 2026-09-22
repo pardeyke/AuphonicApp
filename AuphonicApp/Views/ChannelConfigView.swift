@@ -346,7 +346,7 @@ private struct ChannelConfigPreviewHost: View {
 
     init(mode: ProductionMode, mixdown: Bool) {
         let config = ChannelConfig()
-        config.configure(count: 4, trackNames: ["BOOM", "LAVMIX", "LAV1", "LAV2"], bitDepth: 32)
+        config.configure(count: 4, trackNames: ["BOOM", "LAVMIX", "LAV1", "LAV2"])
         config.productionMode = mode
         config.downloadMixdown = mixdown
         if mixdown { config.mixdownTargetChannel = 1 }

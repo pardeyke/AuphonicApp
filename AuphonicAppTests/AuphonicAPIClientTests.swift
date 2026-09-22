@@ -204,7 +204,7 @@ struct AuphonicAPIClientTests {
     /// Mix Preparation always forces WAV so the channel can be written back
     @Test func mixPreparationJobAlwaysSendsForcedWav() {
         let config = ChannelConfig()
-        config.configure(count: 2, trackNames: ["BOOM", "LAV"], bitDepth: 32)
+        config.configure(count: 2, trackNames: ["BOOM", "LAV"])
         config.channels[0].enabled = true
         config.channels[1].enabled = false
         config.sharedOptions.noiseEnabled = true
@@ -212,7 +212,7 @@ struct AuphonicAPIClientTests {
         let job = try! #require(config.uploadJobs.first)
         let body = AuphonicAPIClient.productionRequestBody(
             presetUuid: config.presetUuidForJob(job),
-            manualSettings: config.settingsForJob(job),
+            manualSettings: config.settingsForJob(job, bitDepth: 32),
             title: "take_ch1"
         )
 

@@ -218,7 +218,7 @@ final class BatchWorkflow {
         }.value
 
         if config.writeSettingsXml {
-            writeSettingsSidecar(for: outputURL, jobs: jobs, config: config)
+            writeSettingsSidecar(for: outputURL, jobs: jobs, config: config, bitDepth: file.bitDepth)
         }
 
         // Housekeeping: the output is safely on disk, remove the productions
@@ -386,7 +386,7 @@ final class BatchWorkflow {
             trackIds: trackIdsByChannel.map(\.trackId),
             trackAlgorithms: config.multitrackTrackAlgorithms,
             masterAlgorithms: config.masterOptions.getSettings(),
-            outputFiles: config.multitrackOutputFiles,
+            outputFiles: config.multitrackOutputFiles(bitDepth: file.bitDepth),
             title: title
         )
 
@@ -463,7 +463,7 @@ final class BatchWorkflow {
         }.value
 
         if config.writeSettingsXml {
-            writeMultitrackSidecar(for: outputURL, config: config)
+            writeMultitrackSidecar(for: outputURL, config: config, bitDepth: file.bitDepth)
         }
 
         if deleteProductionsAfterDownload {
@@ -536,12 +536,12 @@ final class BatchWorkflow {
         throw AuphonicAPIClient.APIError.networkError("Timed out waiting for multitrack production")
     }
 
-    private func writeMultitrackSidecar(for outputURL: URL, config: ChannelConfig) {
+    private func writeMultitrackSidecar(for outputURL: URL, config: ChannelConfig, bitDepth: Int) {
         let payload: [String: Any] = [
             "mode": "multitrack",
             "master": config.masterOptions.getSettings(),
             "tracks": config.multitrackTrackAlgorithms,
-            "output_files": config.multitrackOutputFiles
+            "output_files": config.multitrackOutputFiles(bitDepth: bitDepth)
         ]
         let sidecarURL = outputURL.deletingPathExtension().appendingPathExtension("json")
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
@@ -587,7 +587,7 @@ final class BatchWorkflow {
             let title = "\(file.url.deletingPathExtension().lastPathComponent) \(job.label)"
             let uuid = try await apiClient.createProduction(
                 presetUuid: config.presetUuidForJob(job),
-                manualSettings: config.settingsForJob(job),
+                manualSettings: config.settingsForJob(job, bitDepth: file.bitDepth),
                 title: title
             )
 
@@ -750,10 +750,10 @@ final class BatchWorkflow {
 
     // MARK: - Settings Sidecar
 
-    private func writeSettingsSidecar(for outputURL: URL, jobs: [UploadJob], config: ChannelConfig) {
+    private func writeSettingsSidecar(for outputURL: URL, jobs: [UploadJob], config: ChannelConfig, bitDepth: Int) {
         var perJob: [String: Any] = [:]
         for job in jobs {
-            perJob[job.label] = config.settingsForJob(job)
+            perJob[job.label] = config.settingsForJob(job, bitDepth: bitDepth)
         }
         let sidecarURL = outputURL.deletingPathExtension().appendingPathExtension("json")
         if let data = try? JSONSerialization.data(withJSONObject: perJob, options: [.prettyPrinted, .sortedKeys]) {

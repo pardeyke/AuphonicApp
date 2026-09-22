@@ -53,7 +53,6 @@ final class ChannelConfig {
     // File properties (set by configure())
     private(set) var fileChannelCount: Int = 0
     private(set) var trackNames: [String] = []
-    private(set) var bitDepth: Int = 24
 
     // Channel state
     var channels: [ChannelEntry] = []
@@ -86,10 +85,9 @@ final class ChannelConfig {
     // MARK: - Configuration
 
     /// Initialize channel entries from file metadata
-    func configure(count: Int, trackNames: [String], bitDepth: Int) {
+    func configure(count: Int, trackNames: [String]) {
         self.fileChannelCount = count
         self.trackNames = trackNames
-        self.bitDepth = bitDepth
 
         channels = (0..<count).map { idx in
             let name = channelDisplayName(index: idx, count: count, trackNames: trackNames)
@@ -176,12 +174,13 @@ final class ChannelConfig {
     }
 
     /// `output_files` for a multitrack production: the individual tracks
-    /// archive, plus the mono mixdown when requested.
-    var multitrackOutputFiles: [[String: Any]] {
+    /// archive, plus the mono mixdown when requested. `bitDepth` is the
+    /// container bit depth of the file being processed.
+    func multitrackOutputFiles(bitDepth: Int) -> [[String: Any]] {
         var files: [[String: Any]] = [["format": "tracks", "ending": "wav.zip"]]
         if downloadMixdown {
             files.append([
-                "format": forcedWavFormat,
+                "format": Self.forcedWavFormat(bitDepth: bitDepth),
                 "mono_mixdown": true
             ])
         }
@@ -190,8 +189,10 @@ final class ChannelConfig {
 
     // MARK: - Settings Retrieval
 
-    /// The Auphonic WAV output format used for round-tripping processed channels
-    var forcedWavFormat: String {
+    /// The Auphonic WAV output format used for round-tripping processed
+    /// channels. Decided per file: a group only guarantees equal channel
+    /// counts, so a 16-bit take can sit next to 24-bit and 32-bit float ones.
+    static func forcedWavFormat(bitDepth: Int) -> String {
         bitDepth <= 16 ? "wav-16bit" : "wav-24bit"
     }
 
@@ -209,14 +210,15 @@ final class ChannelConfig {
         return sharedOptions
     }
 
-    /// Settings dict for an upload job. Output is always forced to WAV so the
-    /// processed channels can be written back into the original container,
-    /// and the cutters are forced off so the channel keeps its length even
-    /// when the selected preset has cutting enabled.
-    func settingsForJob(_ job: UploadJob) -> [String: Any] {
+    /// Settings dict for an upload job. Output is always forced to WAV (at the
+    /// file's own bit depth) so the processed channels can be written back
+    /// into the original container, and the cutters are forced off so the
+    /// channel keeps its length even when the selected preset has cutting
+    /// enabled.
+    func settingsForJob(_ job: UploadJob, bitDepth: Int) -> [String: Any] {
         let opts = optionsForJob(job)
         var settings = opts.getSettings()
-        settings["output_files"] = [["format": forcedWavFormat]]
+        settings["output_files"] = [["format": Self.forcedWavFormat(bitDepth: bitDepth)]]
 
         var algorithms = (settings["algorithms"] as? [String: Any]) ?? [:]
         CuttingOptions.disableAll(in: &algorithms)

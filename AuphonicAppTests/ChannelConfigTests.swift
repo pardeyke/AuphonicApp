@@ -6,9 +6,9 @@ import Foundation
 
 struct ChannelConfigTests {
 
-    private func makeConfig(channels: Int, bitDepth: Int = 24) -> ChannelConfig {
+    private func makeConfig(channels: Int) -> ChannelConfig {
         let config = ChannelConfig()
-        config.configure(count: channels, trackNames: [], bitDepth: bitDepth)
+        config.configure(count: channels, trackNames: [])
         return config
     }
 
@@ -23,7 +23,7 @@ struct ChannelConfigTests {
 
     @Test func trackNamesUsedInDisplayNames() {
         let config = ChannelConfig()
-        config.configure(count: 3, trackNames: ["Boom", "", "Lav 1"], bitDepth: 24)
+        config.configure(count: 3, trackNames: ["Boom", "", "Lav 1"])
         #expect(config.channels[0].displayName == "Ch 1 (Boom)")
         #expect(config.channels[1].displayName == "Ch 2")
         #expect(config.channels[2].displayName == "Ch 3 (Lav 1)")
@@ -70,10 +70,10 @@ struct ChannelConfigTests {
     // MARK: Settings
 
     @Test func settingsForJobForcesWavOutput() {
-        let config = makeConfig(channels: 4, bitDepth: 32)
+        let config = makeConfig(channels: 4)
         config.sharedOptions.levelerEnabled = true
         let job = config.uploadJobs[0]
-        let settings = config.settingsForJob(job)
+        let settings = config.settingsForJob(job, bitDepth: 32)
         let outputFiles = settings["output_files"] as? [[String: Any]]
         #expect(outputFiles?.count == 1)
         #expect(outputFiles?.first?["format"] as? String == "wav-24bit")
@@ -91,7 +91,7 @@ struct ChannelConfigTests {
 
         #expect(config.presetUuidForJob(job) == "podcast-preset-with-cutting")
 
-        let algorithms = config.settingsForJob(job)["algorithms"] as? [String: Any]
+        let algorithms = config.settingsForJob(job, bitDepth: 24)["algorithms"] as? [String: Any]
         #expect(algorithms?["silence_cutter"] as? Bool == false)
         #expect(algorithms?["filler_cutter"] as? Bool == false)
         #expect(algorithms?["cough_cutter"] as? Bool == false)
@@ -99,10 +99,27 @@ struct ChannelConfigTests {
     }
 
     @Test func settingsForJobUses16BitFor16BitSource() {
-        let config = makeConfig(channels: 3, bitDepth: 16)
-        let settings = config.settingsForJob(config.uploadJobs[0])
+        let config = makeConfig(channels: 3)
+        let settings = config.settingsForJob(config.uploadJobs[0], bitDepth: 16)
         let outputFiles = settings["output_files"] as? [[String: Any]]
         #expect(outputFiles?.first?["format"] as? String == "wav-16bit")
+    }
+
+    /// The forced WAV format follows each file, not the group: a 16-bit take
+    /// grouped with 24-bit or 32-bit float takes used to drag them all to 16-bit.
+    @Test func forcedWavFormatFollowsEachFilesBitDepth() {
+        let config = makeConfig(channels: 2)
+        let job = config.uploadJobs[0]
+
+        func format(bitDepth: Int) -> String? {
+            let files = config.settingsForJob(job, bitDepth: bitDepth)["output_files"] as? [[String: Any]]
+            return files?.first?["format"] as? String
+        }
+
+        #expect(format(bitDepth: 16) == "wav-16bit")
+        #expect(format(bitDepth: 24) == "wav-24bit")
+        #expect(format(bitDepth: 32) == "wav-24bit")
+        #expect(ChannelConfig.forcedWavFormat(bitDepth: 8) == "wav-16bit")
     }
 
     @Test func unlinkedSettingsUseTheChannelsOwnOptions() {
