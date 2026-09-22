@@ -629,3 +629,68 @@ struct AddFilesTests {
         #expect(vm.showingAlert)                    // the user is told why
     }
 }
+
+
+// MARK: - Waveform cache
+
+@MainActor
+struct WaveformCacheTests {
+
+    private func makeFile(_ contents: String = "abc") throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("wf_\(UUID().uuidString).wav")
+        try Data(contents.utf8).write(to: url)
+        return url
+    }
+
+    @Test func hitsWhileTheFileIsUnchanged() throws {
+        let cache = WaveformCache()
+        let url = try makeFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        #expect(cache.waveforms(for: url) == nil)
+        cache.store([0: [0.5, 0.25]], for: url)
+        #expect(cache.waveforms(for: url)?[0] == [0.5, 0.25])
+    }
+
+    /// The batch writes new output under a reused path; the old waveform
+    /// must not come back for the new file
+    @Test func missesOnceTheFileWasRewritten() throws {
+        let cache = WaveformCache()
+        let url = try makeFile("first version")
+        defer { try? FileManager.default.removeItem(at: url) }
+        cache.store([0: [1]], for: url)
+
+        try FileManager.default.removeItem(at: url)
+        try Data("second, longer version".utf8).write(to: url)
+        #expect(cache.waveforms(for: url) == nil)
+
+        // Same size, later modification date: still a miss
+        cache.store([0: [2]], for: url)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: url.path)
+        #expect(cache.waveforms(for: url) == nil)
+    }
+
+    @Test func evictsLeastRecentlyUsedBeyondTheLimit() throws {
+        let cache = WaveformCache(limit: 2)
+        let a = try makeFile("a"), b = try makeFile("b"), c = try makeFile("c")
+        defer { for u in [a, b, c] { try? FileManager.default.removeItem(at: u) } }
+
+        cache.store([0: [1]], for: a)
+        cache.store([0: [2]], for: b)
+        _ = cache.waveforms(for: a)          // a is now the most recent
+        cache.store([0: [3]], for: c)        // evicts b
+
+        #expect(cache.count == 2)
+        #expect(cache.waveforms(for: a) != nil)
+        #expect(cache.waveforms(for: b) == nil)
+        #expect(cache.waveforms(for: c) != nil)
+    }
+
+    @Test func missingFilesAreNeverCached() {
+        let cache = WaveformCache()
+        let url = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).wav")
+        cache.store([0: [1]], for: url)
+        #expect(cache.count == 0)
+        #expect(cache.waveforms(for: url) == nil)
+    }
+}

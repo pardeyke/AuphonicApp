@@ -625,7 +625,7 @@ final class AudioPlayerService {
     private var waveformGeneration: UInt64 = 0
 
     /// In-memory cache of waveforms keyed by file URL, so switching files is instant.
-    private static var waveformDiskCache: [URL: [Int: [Float]]] = [:]
+    private static let waveformCache = WaveformCache()
 
     /// Reads the file once on a background thread and generates waveforms for all channels + combined.
     private func generateAllWaveformsAsync(file: AVAudioFile, slot: Slot) {
@@ -635,7 +635,7 @@ final class AudioPlayerService {
         let resolution = 8192   // high resolution so the view can zoom in
 
         // Check cache first
-        if let cached = Self.waveformDiskCache[url] {
+        if let cached = Self.waveformCache.waveforms(for: url) {
             if slot == .original {
                 waveformCacheA = cached
                 originalWaveform = cached[0] ?? []
@@ -651,7 +651,7 @@ final class AudioPlayerService {
             guard let self, self.waveformGeneration == gen else { return }
 
             if isFinal {
-                Self.waveformDiskCache[url] = waveforms
+                Self.waveformCache.store(waveforms, for: url)
             }
 
             if slot == .original {
