@@ -13,21 +13,46 @@ struct ProductionStatusTests {
         #expect(!status.isProcessing)
     }
 
+    /// 2 is Auphonic's "Error" state for a production that failed while
+    /// processing; 9 Incomplete, 11 Outdated and 98 Empty cannot run either.
     @Test func isError() {
-        for code in [9, 10, 11, 99] {
+        for code in [2, 9, 11, 98] {
             let status = ProductionStatus(statusCode: code, statusString: "", progress: 0, errorMessage: "err", outputFileUrl: "", uuid: "")
             #expect(status.isError, "Status code \(code) should be error")
             #expect(!status.isDone)
+            #expect(!status.isProcessing)
         }
     }
 
+    /// Intermediate states must not be mistaken for failures — 12 to 15 were
+    /// caught by the old `>= 9` rule.
     @Test func isProcessing() {
-        for code in [4, 5, 6, 7, 8] {
+        for code in [4, 5, 6, 7, 8, 12, 13, 14, 15] {
             let status = ProductionStatus(statusCode: code, statusString: "", progress: 0.5, errorMessage: "", outputFileUrl: "", uuid: "")
             #expect(status.isProcessing, "Status code \(code) should be processing")
             #expect(!status.isDone)
             #expect(!status.isError)
         }
+    }
+
+    /// Waiting for upload/start is neither done, failed nor processing
+    @Test func waitingStatesAreNotErrors() {
+        for code in [0, 1, 10] {
+            let status = ProductionStatus(statusCode: code, statusString: "", progress: 0, errorMessage: "", outputFileUrl: "", uuid: "")
+            #expect(!status.isError, "Status code \(code) should not be an error")
+            #expect(!status.isDone)
+        }
+    }
+
+    @Test func failureDescriptionPrefersErrorMessageThenStatusName() {
+        let withMessage = ProductionStatus(statusCode: 2, statusString: "Error", progress: 0, errorMessage: "Input file corrupt", outputFileUrl: "", uuid: "")
+        #expect(withMessage.failureDescription == "Input file corrupt")
+
+        let statusOnly = ProductionStatus(statusCode: 11, statusString: "Production Outdated", progress: 0, errorMessage: "", outputFileUrl: "", uuid: "")
+        #expect(statusOnly.failureDescription == "Production Outdated")
+
+        let bare = ProductionStatus(statusCode: 2, statusString: "", progress: 0, errorMessage: "", outputFileUrl: "", uuid: "")
+        #expect(bare.failureDescription == "Processing failed")
     }
 
     @Test func idleStatusIsNone() {

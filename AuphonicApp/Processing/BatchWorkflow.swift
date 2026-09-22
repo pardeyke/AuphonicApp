@@ -552,8 +552,7 @@ final class BatchWorkflow {
 
             if status.isDone { return status }
             if status.isError {
-                let message = status.errorMessage.isEmpty ? "Processing failed" : status.errorMessage
-                throw AuphonicAPIClient.APIError.httpError(0, message)
+                throw AuphonicAPIClient.APIError.httpError(0, status.failureDescription)
             }
         }
         throw AuphonicAPIClient.APIError.networkError("Timed out waiting for multitrack production")
@@ -657,8 +656,7 @@ final class BatchWorkflow {
                 return status.outputFileUrl
             }
             if status.isError {
-                let message = status.errorMessage.isEmpty ? "Processing failed" : status.errorMessage
-                throw AuphonicAPIClient.APIError.httpError(0, "\(jobLabel): \(message)")
+                throw AuphonicAPIClient.APIError.httpError(0, "\(jobLabel): \(status.failureDescription)")
             }
         }
         throw AuphonicAPIClient.APIError.networkError("Timed out waiting for \(jobLabel)")

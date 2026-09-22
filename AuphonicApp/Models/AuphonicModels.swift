@@ -63,8 +63,30 @@ struct ProductionStatus {
         self.uuid = uuid
     }
 
+    /// Auphonic production status codes (GET /api/info/production_status.json):
+    ///  0 File Upload, 1 Waiting, 2 Error, 3 Done, 4 Audio Processing,
+    ///  5 Audio Encoding, 6 Outgoing File Transfer, 7 Audio Mono Mixdown,
+    ///  8 Split Audio On Chapter Marks, 9 Incomplete, 10 Production Not
+    ///  Started Yet, 11 Production Outdated, 12 Incoming File Transfer,
+    ///  13 Stopping the Production, 14 Speech Recognition, 15 Production
+    ///  Changed, 98 Empty Production.
+    ///
+    /// Only 2, 9, 11 and 98 are terminal failures. A production that fails
+    /// while processing reports 2, which the old `>= 9` rule polled until the
+    /// timeout; 12–15 are ordinary intermediate states, not errors.
+    static let errorStatusCodes: Set<Int> = [2, 9, 11, 98]
+    static let processingStatusCodes: Set<Int> = [4, 5, 6, 7, 8, 12, 13, 14, 15]
+
     var isDone: Bool { statusCode == 3 }
-    var isError: Bool { statusCode >= 9 }
-    var isProcessing: Bool { statusCode == 4 || statusCode == 5 || statusCode == 6 || statusCode == 7 || statusCode == 8 }
+    var isError: Bool { Self.errorStatusCodes.contains(statusCode) }
+    var isProcessing: Bool { Self.processingStatusCodes.contains(statusCode) }
+
+    /// Human-readable reason for a failed production: Auphonic's message when
+    /// it has one, else the status name ("Incomplete", "Production Outdated").
+    var failureDescription: String {
+        if !errorMessage.isEmpty { return errorMessage }
+        if !statusString.isEmpty { return statusString }
+        return "Processing failed"
+    }
 }
 
