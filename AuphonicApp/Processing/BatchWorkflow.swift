@@ -96,6 +96,17 @@ final class BatchWorkflow {
 
     // MARK: - Run Loop
 
+    /// Whether `error` means the user cancelled rather than the file failed.
+    /// `Task.sleep` and `checkCancellation` throw `CancellationError`, but a
+    /// cancelled `URLSession` upload or download throws `URLError.cancelled`,
+    /// and any error surfacing while the task is already cancelled is a
+    /// consequence of the cancellation too.
+    nonisolated static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return Task.isCancelled
+    }
+
     private func run(
         files: [BatchFile],
         destination: URL,
@@ -113,7 +124,7 @@ final class BatchWorkflow {
 
             do {
                 try await process(index, file)
-            } catch is CancellationError {
+            } catch where Self.isCancellation(error) {
                 file.status = .pending
                 break
             } catch {

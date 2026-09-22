@@ -426,3 +426,34 @@ struct OutputNamingTests {
         #expect(second.lastPathComponent == "scene_2.wav")
     }
 }
+
+
+// MARK: - Cancellation
+
+struct CancellationClassificationTests {
+
+    @Test func cancellationErrorIsCancellation() {
+        #expect(BatchWorkflow.isCancellation(CancellationError()))
+    }
+
+    /// A cancelled URLSession transfer throws URLError.cancelled, not
+    /// CancellationError; it used to mark the file as failed.
+    @Test func cancelledTransferIsCancellation() {
+        #expect(BatchWorkflow.isCancellation(URLError(.cancelled)))
+    }
+
+    @Test func otherErrorsAreFailures() {
+        #expect(!BatchWorkflow.isCancellation(URLError(.timedOut)))
+        #expect(!BatchWorkflow.isCancellation(AuphonicAPIClient.APIError.invalidToken))
+    }
+
+    /// Any error surfacing after the task was cancelled counts as cancellation
+    @Test func errorsInsideCancelledTaskAreCancellation() async {
+        let task = Task {
+            while !Task.isCancelled { await Task.yield() }
+            return BatchWorkflow.isCancellation(URLError(.timedOut))
+        }
+        task.cancel()
+        #expect(await task.value)
+    }
+}
