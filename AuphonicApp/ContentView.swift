@@ -40,52 +40,50 @@ struct ContentView: View {
                 .help(viewModel.mode.summary)
             }
 
-            // Toolbar items of one logical grouping share a single glass
-            // capsule and read as one control, so every action opts out and
-            // draws its own capsule via its button style
+            // The toolbar draws the Liquid Glass itself: adjacent items share
+            // one capsule, a fixed spacer splits them into groups, and the
+            // prominent style marks the primary action. The buttons carry no
+            // glass style of their own.
             if viewModel.isProcessing {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Cancel") {
                         viewModel.cancelProcessing()
                     }
-                    .buttonStyle(.glass)
                 }
-                .sharedBackgroundVisibility(.hidden)
             } else {
-                // Overflow order as the window shrinks: Test Settings goes
-                // first, then Process Batch; Process stays visible longest
+                // Test Settings and Process act on the selected take and share
+                // a capsule. Overflow order as the window shrinks: Test
+                // Settings goes first, then Process Batch; Process stays
+                // visible longest.
                 ToolbarItem(placement: .primaryAction) {
                     Button("Test Settings") {
                         viewModel.testSettings()
                     }
-                    .buttonStyle(.glass)
                     .disabled(viewModel.mode == .standard ? viewModel.batchFiles.isEmpty : viewModel.selectedGroup == nil)
                     .help("Process the selected take with this group's settings into a temporary file and load it into the player's Processed lane for A/B comparison. Uploads at most the first 3 minutes per upload (Auphonic's billing minimum), so a test never costs more than the minimum.")
                 }
-                .sharedBackgroundVisibility(.hidden)
                 .visibilityPriority(.low)
 
                 ToolbarItem(placement: .primaryAction) {
                     Button("Process") {
                         viewModel.processSelectedFile()
                     }
-                    .buttonStyle(.glass)
                     .keyboardShortcut(.return, modifiers: [.command, .shift])
                     .disabled(viewModel.selectedFile == nil)
                     .help("Run the selected take on its own, with the same settings and output folder as the batch.")
                 }
-                .sharedBackgroundVisibility(.hidden)
                 .visibilityPriority(.high)
+
+                ToolbarSpacer(.fixed, placement: .primaryAction)
 
                 ToolbarItem(placement: .primaryAction) {
                     Button("Process Batch") {
                         viewModel.startProcessing()
                     }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(viewModel.batchFiles.isEmpty)
                 }
-                .sharedBackgroundVisibility(.hidden)
                 .visibilityPriority(.automatic)
             }
         }
