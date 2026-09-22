@@ -304,7 +304,7 @@ struct FileListView: View {
                         .foregroundStyle(.green)
                         .lineLimit(1)
                 case .pending:
-                    Text("\(file.timecodeString) · \(file.channelCount)ch · \(file.bitDepth)\(file.isFloat ? "f" : "")bit · \(formatDuration(file.duration))")
+                    Text("\(file.timecodeString) · \(file.channelCount)ch · \(file.bitDepth)\(file.isFloat ? "f" : "")bit · \(DurationText.clock(file.duration))")
                         .font(infoFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -347,17 +347,6 @@ struct FileListView: View {
         }
         .font(.system(size: 18))
         .frame(width: 22)
-    }
-
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        if h > 0 {
-            return String(format: "%d:%02d:%02d", h, m, s)
-        }
-        return String(format: "%d:%02d", m, s)
     }
 
     // MARK: - File Picker

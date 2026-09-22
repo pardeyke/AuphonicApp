@@ -69,12 +69,12 @@ struct MultitrackPlayerView: View {
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 } else {
-                    Text(formatTime(player.currentTime))
+                    Text(DurationText.clock(player.currentTime))
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
 
-                Text("\(formatTime(player.currentTime)) / \(formatTime(slotDuration))")
+                Text("\(DurationText.clock(player.currentTime)) / \(DurationText.clock(slotDuration))")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
@@ -309,11 +309,6 @@ struct MultitrackPlayerView: View {
         guard zoom > 1, player.isPlaying, !player.isScrubbing, slotDuration > 0 else { return }
         let playheadX = contentWidth * (player.currentTime / slotDuration)
         scrollPosition.scrollTo(x: max(0, min(contentWidth - viewWidth, playheadX - viewWidth / 2)))
-    }
-
-    private func formatTime(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        return String(format: "%d:%02d", total / 60, total % 60)
     }
 }
 

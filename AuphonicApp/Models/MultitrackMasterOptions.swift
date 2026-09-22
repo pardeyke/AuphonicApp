@@ -23,6 +23,12 @@ final class MultitrackMasterOptions {
     var loudnessMethod = 1      // 1=Program, 2=Dialog, 3=RMS
     var dualMono = false
 
+    /// True when at least one master algorithm runs. Gates and crosstalk
+    /// damping are master algorithms too — they change the exported tracks.
+    var hasAnyEnabled: Bool {
+        levelerEnabled || gate || crossgate || loudnessEnabled
+    }
+
     /// Master `algorithms` dict for a multitrack production
     func getSettings() -> [String: Any] {
         var algorithms: [String: Any] = [:]

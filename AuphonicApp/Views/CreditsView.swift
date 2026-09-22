@@ -83,8 +83,8 @@ struct CreditsView: View {
                             if cost > 0 {
                                 // Left: remaining
                                 Text(exceedsCredits
-                                     ? "Over by \(formatDuration(abs(remaining)))"
-                                     : "Remaining: \(formatDuration(remaining))")
+                                     ? "Over by \(DurationText.clock(abs(remaining), rounded: true))"
+                                     : "Remaining: \(DurationText.clock(remaining, rounded: true))")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
@@ -93,13 +93,13 @@ struct CreditsView: View {
                                 Spacer(minLength: 4)
 
                                 // Right: cost
-                                Text("Cost: \(formatDuration(cost))")
+                                Text("Cost: \(DurationText.clock(cost, rounded: true))")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
                                     .padding(.trailing, 6)
                             } else {
-                                Text("Credits: \(formatDuration(totalCredits))")
+                                Text("Credits: \(DurationText.clock(totalCredits, rounded: true))")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
@@ -125,18 +125,5 @@ struct CreditsView: View {
     private var exceedsCredits: Bool {
         guard let credits = credits else { return false }
         return estimatedCostSeconds > credits.displayCredits * 3600
-    }
-
-    private func formatDuration(_ seconds: Double) -> String {
-        let totalSeconds = Int(seconds.rounded())
-        let negative = totalSeconds < 0
-        let abs = abs(totalSeconds)
-        let h = abs / 3600
-        let m = (abs % 3600) / 60
-        let s = abs % 60
-        if h > 0 {
-            return String(format: "%@%d:%02d:%02d", negative ? "-" : "", h, m, s)
-        }
-        return String(format: "%@%d:%02d", negative ? "-" : "", m, s)
     }
 }

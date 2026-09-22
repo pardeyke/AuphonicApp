@@ -36,7 +36,7 @@ struct GroupHeaderBubble: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(timecodeRange.isEmpty ? "No timecode" : timecodeRange)
+                    Text(timecodeRange)
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(isSelected ? .white : .primary)

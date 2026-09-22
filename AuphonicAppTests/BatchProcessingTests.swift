@@ -151,6 +151,22 @@ struct FileGrouperTests {
         #expect(groups[2].files.map(\.id) == [d.id])
     }
 
+    @Test func headingShowsRangeSingleTimecodeOrNone() throws {
+        let rate = UInt64(48_000)
+        let a = try makeBatchFile(channels: 2, timecode: 3_600 * rate)          // 01:00:00
+        let b = try makeBatchFile(channels: 2, timecode: 3_600 * rate + 30 * rate)
+        let same = try makeBatchFile(channels: 3, timecode: 7_200 * rate)
+        let none = try makeBatchFile(channels: 4, timecode: nil)
+        defer { for f in [a, b, same, none] { try? FileManager.default.removeItem(at: f.url) } }
+
+        let groups = FileGrouper.makeGroups(from: [b, same, none, a])
+
+        let headings = groups.map(\.timecodeRangeString)
+        #expect(headings.contains("No timecode"))
+        #expect(headings.contains("01:00:00–01:00:30"))
+        #expect(headings.contains("02:00:00"))        // one take: no "x–x" range
+    }
+
     @Test func regroupingKeepsExistingConfig() throws {
         let a = try makeBatchFile(channels: 4, timecode: 1_000_000)
         let b = try makeBatchFile(channels: 4, timecode: 2_000_000)
@@ -455,5 +471,29 @@ struct CancellationClassificationTests {
         }
         task.cancel()
         #expect(await task.value)
+    }
+}
+
+
+// MARK: - Duration text
+
+struct DurationTextTests {
+
+    @Test func minutesAndSeconds() {
+        #expect(DurationText.clock(0) == "0:00")
+        #expect(DurationText.clock(9.9) == "0:09")
+        #expect(DurationText.clock(9.9, rounded: true) == "0:10")
+        #expect(DurationText.clock(83) == "1:23")
+    }
+
+    @Test func hoursFromSixtyMinutes() {
+        #expect(DurationText.clock(3600) == "1:00:00")
+        #expect(DurationText.clock(3599) == "59:59")
+        #expect(DurationText.clock(47 * 3600 + 7 * 60 + 9) == "47:07:09")
+    }
+
+    @Test func negativeDurationsKeepTheSign() {
+        #expect(DurationText.clock(-90, rounded: true) == "-1:30")
+        #expect(DurationText.clock(-3601) == "-1:00:01")
     }
 }

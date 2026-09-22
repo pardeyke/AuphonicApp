@@ -160,4 +160,41 @@ struct ChannelConfigTests {
         config.deselectAll()
         #expect(!config.hasValidJobConfiguration)
     }
+
+    // MARK: Configuration validity
+
+    /// A multitrack group with every master and track algorithm off would
+    /// bill the 3-minute minimum and change nothing, so it is not "configured".
+    @Test func multitrackWithNothingEnabledIsNotConfigured() {
+        let config = makeConfig(channels: 2)
+        config.productionMode = .multitrack
+        #expect(config.hasValidJobConfiguration)     // master defaults are on
+
+        config.masterOptions.levelerEnabled = false
+        config.masterOptions.gate = false
+        config.masterOptions.crossgate = false
+        config.masterOptions.loudnessEnabled = false
+        #expect(!config.hasValidJobConfiguration)
+
+        config.sharedOptions.noiseEnabled = true
+        #expect(config.hasValidJobConfiguration)
+
+        config.sharedOptions.noiseEnabled = false
+        config.selectedPresetUuid = "preset"
+        #expect(config.hasValidJobConfiguration)
+    }
+
+    @Test func multitrackUnlinkedCountsAnyChannelAlgorithm() {
+        let config = makeConfig(channels: 2)
+        config.productionMode = .multitrack
+        config.linkedSettings = false
+        config.masterOptions.levelerEnabled = false
+        config.masterOptions.gate = false
+        config.masterOptions.crossgate = false
+        config.masterOptions.loudnessEnabled = false
+        #expect(!config.hasValidJobConfiguration)
+
+        config.channels[1].options.levelerEnabled = true
+        #expect(config.hasValidJobConfiguration)
+    }
 }

@@ -54,6 +54,19 @@ final class AppViewModel {
         batchFiles.first { $0.id == selectedFileID }
     }
 
+    /// Whether a settings test drive could run right now (mirrors the
+    /// guards in `testSettings()`, so the toolbar button is not enabled
+    /// only to show an alert)
+    var canTestSettings: Bool {
+        guard !isProcessing else { return false }
+        switch mode {
+        case .standard:
+            return !batchFiles.isEmpty && standardConfig.hasValidConfiguration
+        case .mixPreparation:
+            return selectedGroup?.config.hasValidJobConfiguration == true
+        }
+    }
+
     init() {
         apiClient.token = settingsManager.apiToken
         mode = settingsManager.appMode
@@ -100,6 +113,11 @@ final class AppViewModel {
             batchFiles.append(contentsOf: loaded)
             rebuildGroups()
             isLoadingFiles = false
+
+            // Start with a take selected so the player and Process are live
+            if selectedFileID == nil, let first = groups.first?.files.first ?? batchFiles.first {
+                selectFile(first)
+            }
 
             if loaded.count < attempted {
                 showAlert("\(attempted - loaded.count) file(s) could not be read and were skipped.")

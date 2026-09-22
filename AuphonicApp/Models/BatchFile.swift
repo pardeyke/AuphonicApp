@@ -108,10 +108,15 @@ final class FileGroup: Identifiable {
         files.reduce(0) { $0 + $1.duration }
     }
 
+    /// Heading of the group bubble: the timecode span of its takes. Files
+    /// without bext sort first, so a group whose first file has none is the
+    /// "no timecode" group.
     var timecodeRangeString: String {
         guard let first = files.first, let last = files.last else { return "" }
-        if !first.hasTimecode { return "no timecode" }
-        return "\(first.timecodeString)–\(last.timecodeString)"
+        if !first.hasTimecode { return "No timecode" }
+        let start = first.timecodeString
+        let end = last.timecodeString
+        return start == end ? start : "\(start)–\(end)"
     }
 
     var title: String {

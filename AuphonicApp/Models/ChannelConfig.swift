@@ -235,18 +235,28 @@ final class ChannelConfig {
         return ""
     }
 
-    /// Whether the current configuration has anything to process
+    /// Whether the current configuration has anything to process. A group
+    /// that fails this is skipped by the batch and shows a warning, so a
+    /// production that would only bill the 3-minute minimum and change
+    /// nothing is never created.
     var hasValidJobConfiguration: Bool {
         guard !uploadJobs.isEmpty else { return false }
 
-        // Multitrack always processes (master leveler, gate and crosstalk
-        // damping apply even when no per-track algorithm is enabled)
-        if productionMode == .multitrack { return true }
+        let preset = linkedSettings && !presetModified ? selectedPresetUuid : ""
+        let anyTrackAlgorithm = linkedSettings
+            ? sharedOptions.hasAnyAlgorithmEnabled()
+            : uploadJobs.contains { optionsForJob($0).hasAnyAlgorithmEnabled() }
 
-        if linkedSettings {
-            let preset = presetModified ? "" : selectedPresetUuid
-            return !preset.isEmpty || sharedOptions.hasAnyAlgorithmEnabled()
+        switch productionMode {
+        case .multitrack:
+            // The master algorithms (leveler, gates, crosstalk, loudness)
+            // process the exported tracks too, so they count on their own
+            return masterOptions.hasAnyEnabled || anyTrackAlgorithm || !preset.isEmpty
+        case .singletrack:
+            if linkedSettings {
+                return !preset.isEmpty || anyTrackAlgorithm
+            }
+            return uploadJobs.allSatisfy { optionsForJob($0).hasAnyAlgorithmEnabled() }
         }
-        return uploadJobs.allSatisfy { optionsForJob($0).hasAnyAlgorithmEnabled() }
     }
 }

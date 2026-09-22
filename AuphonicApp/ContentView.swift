@@ -60,7 +60,7 @@ struct ContentView: View {
                     Button("Test Settings") {
                         viewModel.testSettings()
                     }
-                    .disabled(viewModel.mode == .standard ? viewModel.batchFiles.isEmpty : viewModel.selectedGroup == nil)
+                    .disabled(!viewModel.canTestSettings)
                     .help("Process the selected take with this group's settings into a temporary file and load it into the player's Processed lane for A/B comparison. Uploads at most the first 3 minutes per upload (Auphonic's billing minimum), so a test never costs more than the minimum.")
                 }
                 .visibilityPriority(.low)
