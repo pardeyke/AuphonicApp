@@ -35,6 +35,36 @@ final class BatchWorkflow {
     private static let maxConcurrentJobs = 3
     private static let pollInterval: Duration = .seconds(2)
     private static let pollTimeout: TimeInterval = 3600
+    /// Consecutive failed status polls tolerated before the file fails
+    /// (about 30 s of an unreachable server at the 2 s interval)
+    static let maxConsecutivePollFailures = 15
+
+    /// Whether a failed status poll can be retried. Transport errors and
+    /// server errors usually pass; a rejected token or a production that no
+    /// longer exists will not, and used to be polled for the full hour.
+    nonisolated static func isRetryablePollError(_ error: Error) -> Bool {
+        switch error {
+        case AuphonicAPIClient.APIError.noToken, AuphonicAPIClient.APIError.invalidToken:
+            return false
+        case AuphonicAPIClient.APIError.httpError(let code, _):
+            return code != 404
+        default:
+            return true
+        }
+    }
+
+    /// Tracks failed polls in a row; `record` throws once the poll should stop.
+    struct PollFailures {
+        private(set) var consecutive = 0
+
+        mutating func reset() { consecutive = 0 }
+
+        mutating func record(_ error: Error) throws {
+            guard BatchWorkflow.isRetryablePollError(error) else { throw error }
+            consecutive += 1
+            if consecutive >= BatchWorkflow.maxConsecutivePollFailures { throw error }
+        }
+    }
 
     init(apiClient: AuphonicAPIClient) {
         self.apiClient = apiClient
@@ -548,6 +578,7 @@ final class BatchWorkflow {
 
     private func pollUntilDoneMultitrack(productionUuid: String, file: BatchFile) async throws -> ProductionStatus {
         let deadline = Date().addingTimeInterval(Self.pollTimeout)
+        var failures = PollFailures()
 
         while Date() < deadline {
             try await Task.sleep(for: Self.pollInterval)
@@ -555,8 +586,10 @@ final class BatchWorkflow {
             let status: ProductionStatus
             do {
                 status = try await apiClient.getProductionStatus(productionUuid: productionUuid)
+                failures.reset()
             } catch {
-                continue    // tolerate transient poll errors
+                try failures.record(error)   // transient: keep polling
+                continue
             }
 
             file.progress = 0.45 + min(1, max(0, status.progress)) * 0.4
@@ -649,6 +682,7 @@ final class BatchWorkflow {
 
     private func pollUntilDone(productionUuid: String, jobLabel: String, file: BatchFile) async throws -> String {
         let deadline = Date().addingTimeInterval(Self.pollTimeout)
+        var failures = PollFailures()
 
         while Date() < deadline {
             try await Task.sleep(for: Self.pollInterval)
@@ -656,8 +690,10 @@ final class BatchWorkflow {
             let status: ProductionStatus
             do {
                 status = try await apiClient.getProductionStatus(productionUuid: productionUuid)
+                failures.reset()
             } catch {
-                continue    // tolerate transient poll errors
+                try failures.record(error)   // transient: keep polling
+                continue
             }
 
             if status.isDone {

@@ -497,3 +497,52 @@ struct DurationTextTests {
         #expect(DurationText.clock(-3601) == "-1:00:01")
     }
 }
+
+
+// MARK: - Poll error handling
+
+struct PollFailureTests {
+
+    @Test func tokenAndMissingProductionErrorsAreNotRetried() {
+        #expect(!BatchWorkflow.isRetryablePollError(AuphonicAPIClient.APIError.invalidToken))
+        #expect(!BatchWorkflow.isRetryablePollError(AuphonicAPIClient.APIError.noToken))
+        #expect(!BatchWorkflow.isRetryablePollError(AuphonicAPIClient.APIError.httpError(404, "not found")))
+    }
+
+    @Test func transportAndServerErrorsAreRetried() {
+        #expect(BatchWorkflow.isRetryablePollError(URLError(.timedOut)))
+        #expect(BatchWorkflow.isRetryablePollError(URLError(.notConnectedToInternet)))
+        #expect(BatchWorkflow.isRetryablePollError(AuphonicAPIClient.APIError.httpError(502, "bad gateway")))
+        #expect(BatchWorkflow.isRetryablePollError(AuphonicAPIClient.APIError.networkError("offline")))
+        #expect(BatchWorkflow.isRetryablePollError(AuphonicAPIClient.APIError.decodingError("garbage")))
+    }
+
+    /// A revoked token used to be swallowed for the full one-hour timeout
+    @Test func recordThrowsImmediatelyForNonRetryableErrors() {
+        var failures = BatchWorkflow.PollFailures()
+        #expect(throws: AuphonicAPIClient.APIError.self) {
+            try failures.record(AuphonicAPIClient.APIError.invalidToken)
+        }
+    }
+
+    @Test func recordThrowsAfterTooManyConsecutiveFailures() throws {
+        var failures = BatchWorkflow.PollFailures()
+        for _ in 1..<BatchWorkflow.maxConsecutivePollFailures {
+            try failures.record(URLError(.timedOut))
+        }
+        #expect(failures.consecutive == BatchWorkflow.maxConsecutivePollFailures - 1)
+        #expect(throws: URLError.self) {
+            try failures.record(URLError(.timedOut))
+        }
+    }
+
+    @Test func successfulPollResetsTheCounter() throws {
+        var failures = BatchWorkflow.PollFailures()
+        for _ in 1..<BatchWorkflow.maxConsecutivePollFailures {
+            try failures.record(URLError(.timedOut))
+        }
+        failures.reset()
+        try failures.record(URLError(.timedOut))
+        #expect(failures.consecutive == 1)
+    }
+}
