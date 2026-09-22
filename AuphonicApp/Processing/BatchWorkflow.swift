@@ -199,6 +199,9 @@ final class BatchWorkflow {
 
         var results: [(job: UploadJob, downloaded: URL)] = []
         var productionUuids: [String] = []
+        // Every temp file is registered the moment its job finishes, so the
+        // deferred cleanup also covers jobs that completed before a sibling
+        // in the same batch failed (a failing job removes its own files).
         var tempFiles: [URL] = []
         defer {
             for temp in tempFiles where temp != file.url {
@@ -206,42 +209,29 @@ final class BatchWorkflow {
             }
         }
 
-        do {
-            var done = 0
-            for batch in stride(from: 0, to: jobs.count, by: Self.maxConcurrentJobs).map({
-                Array(jobs[$0..<min($0 + Self.maxConcurrentJobs, jobs.count)])
-            }) {
-                try Task.checkCancellation()
+        var done = 0
+        for batch in stride(from: 0, to: jobs.count, by: Self.maxConcurrentJobs).map({
+            Array(jobs[$0..<min($0 + Self.maxConcurrentJobs, jobs.count)])
+        }) {
+            try Task.checkCancellation()
 
-                let batchResults = try await withThrowingTaskGroup(
-                    of: (job: UploadJob, downloaded: URL, extracted: URL, productionUuid: String).self
-                ) { group in
-                    for job in batch {
-                        group.addTask {
-                            try await self.processJob(job, file: file, config: config)
-                        }
+            try await withThrowingTaskGroup(
+                of: (job: UploadJob, downloaded: URL, extracted: URL, productionUuid: String).self
+            ) { group in
+                for job in batch {
+                    group.addTask {
+                        try await self.processJob(job, file: file, config: config)
                     }
-                    var collected: [(job: UploadJob, downloaded: URL, extracted: URL, productionUuid: String)] = []
-                    for try await result in group {
-                        collected.append(result)
-                    }
-                    return collected
                 }
-
-                for result in batchResults {
-                    results.append((result.job, result.downloaded))
-                    productionUuids.append(result.productionUuid)
+                for try await result in group {
                     tempFiles.append(result.extracted)
                     tempFiles.append(result.downloaded)
+                    results.append((result.job, result.downloaded))
+                    productionUuids.append(result.productionUuid)
                     done += 1
                     file.progress = 0.9 * Double(done) / Double(jobs.count)
                 }
             }
-        } catch {
-            for result in results {
-                try? FileManager.default.removeItem(at: result.downloaded)
-            }
-            throw error
         }
 
         // Reassemble: copy original, patch processed channels into it
@@ -392,6 +382,16 @@ final class BatchWorkflow {
         var uploads: [(fieldName: String, file: URL)] = []
         var trackIdsByChannel: [(channel: Int, trackId: String)] = []
 
+        // Auphonic names the exported tracks after the uploaded file names,
+        // so each track is uploaded as "<trackId>.wav". Those names live in a
+        // folder private to this file: in the shared temp folder a leftover
+        // from a crashed run would block the rename and the UUID-named file
+        // would be uploaded instead, breaking the track mapping later.
+        let uploadDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("auphonic_upload_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: uploadDirectory, withIntermediateDirectories: true)
+        workDirectories.append(uploadDirectory)
+
         for channel in channels {
             try Task.checkCancellation()
             let channelNumber = channel.id + 1
@@ -404,17 +404,17 @@ final class BatchWorkflow {
                     maxDuration: maxDuration
                 )
             }.value
-            tempFiles.append(extracted)
 
             let trackId = config.trackId(for: channel)
-            // Auphonic names the exported files after the uploaded file names
-            let named = extracted.deletingLastPathComponent()
-                .appendingPathComponent("\(trackId).wav")
-            try? FileManager.default.moveItem(at: extracted, to: named)
-            let uploadURL = FileManager.default.fileExists(atPath: named.path) ? named : extracted
-            if uploadURL != extracted { tempFiles.append(uploadURL) }
+            let named = uploadDirectory.appendingPathComponent("\(trackId).wav")
+            do {
+                try FileManager.default.moveItem(at: extracted, to: named)
+            } catch {
+                try? FileManager.default.removeItem(at: extracted)
+                throw error
+            }
 
-            uploads.append((fieldName: trackId, file: uploadURL))
+            uploads.append((fieldName: trackId, file: named))
             trackIdsByChannel.append((channel: channelNumber, trackId: trackId))
         }
 
