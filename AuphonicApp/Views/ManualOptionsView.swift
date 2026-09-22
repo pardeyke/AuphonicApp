@@ -461,7 +461,7 @@ struct ManualOptionsView: View {
     }
 
     private var levelerCard: some View {
-        AlgorithmCard(
+        SettingsCard(
             title: "Adaptive Leveler",
             subtitle: "Corrects level differences between speakers, music and speech",
             info: AlgorithmInfo.leveler,
@@ -566,7 +566,7 @@ struct ManualOptionsView: View {
     // MARK: - Loudness Normalization
 
     private var loudnessCard: some View {
-        AlgorithmCard(
+        SettingsCard(
             title: "Loudness Normalization",
             subtitle: "Normalizes the file to a loudness target with a true peak limiter",
             info: AlgorithmInfo.loudness,
@@ -599,7 +599,7 @@ struct ManualOptionsView: View {
     // MARK: - Filtering
 
     private var filteringCard: some View {
-        AlgorithmCard(
+        SettingsCard(
             title: "Filtering",
             subtitle: "Adaptive high-pass filtering and voice spectrum optimization",
             info: AlgorithmInfo.filtering,
@@ -641,7 +641,7 @@ struct ManualOptionsView: View {
     }
 
     private var noiseCard: some View {
-        AlgorithmCard(
+        SettingsCard(
             title: "Noise & Reverb Reduction",
             subtitle: "Removes background noise, hum and reverb from speech",
             info: AlgorithmInfo.denoise,
@@ -730,22 +730,33 @@ private struct ManualOptionsPreviewHost: View {
 
 // MARK: - Card & Row Components
 
-/// One algorithm block styled after the Auphonic web UI: a switch, title with
-/// short description, an info popover, and the parameters when enabled.
-struct AlgorithmCard<Content: View>: View {
+/// One block of settings styled after the Auphonic web UI: title with a short
+/// description, an info popover, and the parameters below a divider. With
+/// `isEnabled` the header gets a switch and the parameters only show while
+/// it is on (the algorithm cards); without it the content is always shown.
+///
+/// Content cards are not Liquid Glass — glass is for the controls floating
+/// above the content — so this is a grouped background with a hairline.
+struct SettingsCard<Content: View>: View {
     let title: String
     let subtitle: String
     let info: String
-    @Binding var isEnabled: Bool
+    var isEnabled: Binding<Bool>? = nil
     @ViewBuilder var content: () -> Content
+
+    static var cornerRadius: CGFloat { 12 }
+
+    private var showsContent: Bool { isEnabled?.wrappedValue ?? true }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                Toggle("", isOn: $isEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .labelsHidden()
+                if let isEnabled {
+                    Toggle("", isOn: isEnabled)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .labelsHidden()
+                }
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
@@ -760,7 +771,7 @@ struct AlgorithmCard<Content: View>: View {
                 InfoButton(title: title, text: info)
             }
 
-            if isEnabled {
+            if showsContent {
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     content()
@@ -770,12 +781,12 @@ struct AlgorithmCard<Content: View>: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                .fill(.background.secondary)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                .strokeBorder(.separator, lineWidth: 1)
         )
     }
 }

@@ -74,7 +74,7 @@ struct StandardModeView: View {
     // MARK: - Automatic Cutting
 
     private var cuttingCard: some View {
-        AlgorithmCard(
+        SettingsCard(
             title: "Automatic Cutting",
             subtitle: "Cuts silence, filler words, coughs and music out of the file",
             info: AlgorithmInfo.automaticCutting,
@@ -112,49 +112,25 @@ struct StandardModeView: View {
     // MARK: - Output
 
     private var outputCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Output File")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("Format Auphonic encodes the processed file in")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+        SettingsCard(
+            title: "Output File",
+            subtitle: "Format Auphonic encodes the processed file in",
+            info: AlgorithmInfo.outputFormat
+        ) {
+            PickerRow("Format", info: AlgorithmInfo.outputFormat, selection: formatBinding) {
+                ForEach(OutputFormat.allCases) { format in
+                    Text(format.displayName).tag(format)
                 }
-
-                Spacer()
-
-                InfoButton(title: "Output File", text: AlgorithmInfo.outputFormat)
             }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
-                PickerRow("Format", info: AlgorithmInfo.outputFormat, selection: formatBinding) {
-                    ForEach(OutputFormat.allCases) { format in
-                        Text(format.displayName).tag(format)
-                    }
-                }
-
-                if config.outputFormat.hasBitrate {
-                    PickerRow("Bitrate", info: AlgorithmInfo.outputBitrate, selection: bitrateBinding) {
-                        ForEach(config.outputFormat.availableBitrates, id: \.self) { rate in
-                            Text("\(rate) kbps").tag(rate)
-                        }
+            if config.outputFormat.hasBitrate {
+                PickerRow("Bitrate", info: AlgorithmInfo.outputBitrate, selection: bitrateBinding) {
+                    ForEach(config.outputFormat.availableBitrates, id: \.self) { rate in
+                        Text("\(rate) kbps").tag(rate)
                     }
                 }
             }
-            .padding(.leading, 4)
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-        )
     }
 
     /// Switching the format resets the bitrate to that format's default when

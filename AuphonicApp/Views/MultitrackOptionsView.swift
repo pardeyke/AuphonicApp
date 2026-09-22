@@ -33,21 +33,11 @@ struct MultitrackOptionsView: View {
     // MARK: - Mixdown Export
 
     private var mixdownCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Mixdown")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("Individual tracks are always exported and written back to their channels")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                InfoButton(title: "Mixdown", text: AlgorithmInfo.multitrackMixdown)
-            }
-
-            Divider()
-
+        SettingsCard(
+            title: "Mixdown",
+            subtitle: "Individual tracks are always exported and written back to their channels",
+            info: AlgorithmInfo.multitrackMixdown
+        ) {
             GlassCheckbox(
                 label: "Also download the master mixdown",
                 isOn: Binding(
@@ -97,21 +87,12 @@ struct MultitrackOptionsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-        )
     }
 
     // MARK: - Master Leveler
 
     private var masterLevelerCard: some View {
-        AlgorithmCard(
+        SettingsCard(
             title: "Master Leveler",
             subtitle: "Balances the combined mix of all tracks",
             info: AlgorithmInfo.multitrackMasterLeveler,
@@ -151,21 +132,11 @@ struct MultitrackOptionsView: View {
     // MARK: - Gates
 
     private var gatesCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Gates & Crosstalk")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("Only available in multitrack productions")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                InfoButton(title: "Gates & Crosstalk", text: AlgorithmInfo.multitrackGates)
-            }
-
-            Divider()
-
+        SettingsCard(
+            title: "Gates & Crosstalk",
+            subtitle: "Only available in multitrack productions",
+            info: AlgorithmInfo.multitrackGates
+        ) {
             ToggleRow(
                 "Noise Gate",
                 info: AlgorithmInfo.multitrackGate,
@@ -178,21 +149,12 @@ struct MultitrackOptionsView: View {
                 isOn: changed(Binding(get: { master.crossgate }, set: { master.crossgate = $0 }))
             )
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-        )
     }
 
     // MARK: - Master Loudness
 
     private var masterLoudnessCard: some View {
-        AlgorithmCard(
+        SettingsCard(
             title: "Master Loudness Normalization",
             subtitle: "Loudness target and true peak limiter of the mixdown",
             info: AlgorithmInfo.loudness,
