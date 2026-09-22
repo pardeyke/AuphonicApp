@@ -546,3 +546,86 @@ struct PollFailureTests {
         #expect(failures.consecutive == 1)
     }
 }
+
+
+// MARK: - Adding files to the batch
+
+@MainActor
+struct AddFilesTests {
+
+    private func makeViewModel() -> (AppViewModel, () -> Void) {
+        let suite = "AuphonicAppTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let vm = AppViewModel(settingsManager: SettingsManager(defaults: defaults))
+        return (vm, { defaults.removePersistentDomain(forName: suite) })
+    }
+
+    private func makeAiff() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test_\(UUID().uuidString).aiff")
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 48000.0,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: true,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        let file = try AVAudioFile(forWriting: url, settings: settings)
+        let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4800)!
+        buffer.frameLength = 4800
+        try file.write(from: buffer)
+        return url
+    }
+
+    private func waitUntilLoaded(_ vm: AppViewModel) async {
+        for _ in 0..<200 where vm.isLoadingFiles {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+    }
+
+    @Test func mixPreparationKeepsOnlyWavAndDedupes() async throws {
+        let (vm, tearDown) = makeViewModel()
+        defer { tearDown() }
+        vm.mode = .mixPreparation
+
+        let wav = tempWavURL()
+        try makeWav(url: wav, channels: 2) { _ in 0 }
+        let aiff = try makeAiff()
+        defer { try? FileManager.default.removeItem(at: wav); try? FileManager.default.removeItem(at: aiff) }
+
+        vm.addFiles([wav, aiff, wav])
+        await waitUntilLoaded(vm)
+
+        #expect(vm.batchFiles.map(\.url) == [wav])
+        #expect(vm.selectedFile?.url == wav)         // first take is selected
+
+        // Two overlapping loads of the same file add it once
+        vm.addFiles([wav])
+        vm.addFiles([wav])
+        #expect(vm.isLoadingFiles)
+        await waitUntilLoaded(vm)
+        #expect(vm.batchFiles.count == 1)
+    }
+
+    @Test func standardModeAcceptsOtherFormatsAndModeSwitchDropsThem() async throws {
+        let (vm, tearDown) = makeViewModel()
+        defer { tearDown() }
+        vm.mode = .standard
+
+        let wav = tempWavURL()
+        try makeWav(url: wav, channels: 1) { _ in 0 }
+        let aiff = try makeAiff()
+        defer { try? FileManager.default.removeItem(at: wav); try? FileManager.default.removeItem(at: aiff) }
+
+        vm.addFiles([wav, aiff])
+        await waitUntilLoaded(vm)
+        #expect(Set(vm.batchFiles.map(\.url)) == [wav, aiff])
+
+        vm.mode = .mixPreparation
+        #expect(vm.batchFiles.map(\.url) == [wav])
+        #expect(vm.showingAlert)                    // the user is told why
+    }
+}

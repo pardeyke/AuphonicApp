@@ -5,7 +5,7 @@ import AVFoundation
 @Observable
 final class AppViewModel {
     // Services
-    let settingsManager = SettingsManager()
+    let settingsManager: SettingsManager
     let apiClient = AuphonicAPIClient()
     let audioPlayer = AudioPlayerService()
 
@@ -25,7 +25,9 @@ final class AppViewModel {
     private(set) var groups: [FileGroup] = []
     var selectedGroupID: UUID?
     var selectedFileID: UUID?
-    var isLoadingFiles = false
+    /// Folder scans in flight; drops and the open panel can overlap
+    private var loadsInFlight = 0
+    var isLoadingFiles: Bool { loadsInFlight > 0 }
 
     // API state
     var presets: [AuphonicPreset] = []
@@ -67,10 +69,12 @@ final class AppViewModel {
         }
     }
 
-    init() {
-        apiClient.token = settingsManager.apiToken
-        mode = settingsManager.appMode
-        audioPlayer.applyOutputDevice(named: settingsManager.audioOutputDevice)
+    /// Tests pass a `SettingsManager` on a throwaway defaults suite
+    init(settingsManager: SettingsManager? = nil) {
+        self.settingsManager = settingsManager ?? SettingsManager()
+        apiClient.token = self.settingsManager.apiToken
+        mode = self.settingsManager.appMode
+        audioPlayer.applyOutputDevice(named: self.settingsManager.audioOutputDevice)
     }
 
     // MARK: - Connection
@@ -102,17 +106,26 @@ final class AppViewModel {
         let known = Set(batchFiles.map(\.url))
         let mode = mode
 
-        isLoadingFiles = true
+        loadsInFlight += 1
         Task {
+            defer { loadsInFlight -= 1 }
+
             // Folder expansion and metadata reads are file I/O; keep them off the main actor
-            let (attempted, loaded) = await Task.detached(priority: .userInitiated) {
+            let (attempted, scanned) = await Task.detached(priority: .userInitiated) {
                 let audioURLs = Self.collectAudioURLs(from: urls, mode: mode).filter { !known.contains($0) }
                 return (audioURLs.count, audioURLs.compactMap { BatchFile(url: $0) })
             }.value
 
+            // The batch may have changed while scanning: another load can
+            // have added the same files, and the mode picker is disabled
+            // during loads but a drop can still land right before that.
+            let current = Set(batchFiles.map(\.url))
+            let loaded = scanned.filter {
+                !current.contains($0.url) && AudioFileTypes.isAudioFile($0.url, mode: self.mode)
+            }
+
             batchFiles.append(contentsOf: loaded)
             rebuildGroups()
-            isLoadingFiles = false
 
             // Start with a take selected so the player and Process are live
             if selectedFileID == nil, let first = groups.first?.files.first ?? batchFiles.first {

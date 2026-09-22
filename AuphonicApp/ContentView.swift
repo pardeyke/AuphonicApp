@@ -38,6 +38,9 @@ struct ContentView: View {
                     selection: $viewModel.mode
                 )
                 .fixedSize()
+                // Switching modes drops non-WAV files, which a running batch
+                // or a folder scan may still be working with
+                .disabled(viewModel.isProcessing || viewModel.isLoadingFiles)
                 .help(viewModel.mode.summary)
             }
 
