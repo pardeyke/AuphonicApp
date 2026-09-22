@@ -3,11 +3,16 @@ import Foundation
 @Observable
 final class SettingsManager {
     private let defaults: UserDefaults
+    private let tokenStore: any TokenStore
+    /// Keychain reads are not free; the token is read once per session
+    private var cachedToken: String?
 
-    /// The app uses the standard defaults; tests pass a throwaway suite so
-    /// they never touch the user's real settings (the API token included).
-    init(defaults: UserDefaults = .standard) {
+    /// The app uses the standard defaults and the Keychain; tests pass a
+    /// throwaway suite and an in-memory store so they never touch the
+    /// user's real settings.
+    init(defaults: UserDefaults = .standard, tokenStore: (any TokenStore)? = nil) {
         self.defaults = defaults
+        self.tokenStore = tokenStore ?? KeychainTokenStore()
     }
 
     private enum Keys {
@@ -30,9 +35,26 @@ final class SettingsManager {
         set { defaults.set(newValue.rawValue, forKey: Keys.appMode) }
     }
 
+    /// Stored in the Keychain. Versions up to 2.0 kept it as plain text in
+    /// the preferences; such a token is moved into the Keychain on first read
+    /// and removed from the preferences.
     var apiToken: String {
-        get { defaults.string(forKey: Keys.apiToken) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.apiToken) }
+        get {
+            if let cachedToken { return cachedToken }
+            var token = tokenStore.readToken() ?? ""
+            if token.isEmpty, let legacy = defaults.string(forKey: Keys.apiToken), !legacy.isEmpty {
+                token = legacy
+                tokenStore.writeToken(legacy)
+                defaults.removeObject(forKey: Keys.apiToken)
+            }
+            cachedToken = token
+            return token
+        }
+        set {
+            cachedToken = newValue
+            tokenStore.writeToken(newValue.isEmpty ? nil : newValue)
+            defaults.removeObject(forKey: Keys.apiToken)
+        }
     }
 
     var hasApiToken: Bool { !apiToken.isEmpty }

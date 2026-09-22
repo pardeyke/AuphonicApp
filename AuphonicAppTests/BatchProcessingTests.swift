@@ -556,7 +556,7 @@ struct AddFilesTests {
     private func makeViewModel() -> (AppViewModel, () -> Void) {
         let suite = "AuphonicAppTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let vm = AppViewModel(settingsManager: SettingsManager(defaults: defaults))
+        let vm = AppViewModel(settingsManager: SettingsManager(defaults: defaults, tokenStore: InMemoryTokenStore()))
         return (vm, { defaults.removePersistentDomain(forName: suite) })
     }
 

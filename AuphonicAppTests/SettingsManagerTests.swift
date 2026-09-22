@@ -6,17 +6,27 @@ import Foundation
 /// test host is the sandboxed app itself, so writing to `.standard` here
 /// would overwrite the user's real settings — an earlier version of these
 /// tests wiped the API token that way.
+/// Token store that never leaves the test process
+final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
+    private(set) var token: String?
+    init(token: String? = nil) { self.token = token }
+    func readToken() -> String? { token }
+    func writeToken(_ token: String?) { self.token = token }
+}
+
 struct SettingsManagerTests {
 
     private struct Sandbox {
         let manager: SettingsManager
         let defaults: UserDefaults
+        let tokenStore: InMemoryTokenStore
         let suiteName: String
 
-        init() {
+        init(token: String? = nil) {
             suiteName = "AuphonicAppTests.\(UUID().uuidString)"
             defaults = UserDefaults(suiteName: suiteName)!
-            manager = SettingsManager(defaults: defaults)
+            tokenStore = InMemoryTokenStore(token: token)
+            manager = SettingsManager(defaults: defaults, tokenStore: tokenStore)
         }
 
         func tearDown() {
@@ -33,7 +43,40 @@ struct SettingsManagerTests {
         box.manager.apiToken = token
         #expect(box.manager.apiToken == token)
         #expect(box.manager.hasApiToken)
-        #expect(box.defaults.string(forKey: "apiToken") == token)
+        // Keychain, not preferences
+        #expect(box.tokenStore.token == token)
+        #expect(box.defaults.string(forKey: "apiToken") == nil)
+    }
+
+    @Test func clearingTheTokenRemovesItFromTheStore() {
+        let box = Sandbox(token: "old")
+        defer { box.tearDown() }
+
+        #expect(box.manager.hasApiToken)
+        box.manager.apiToken = ""
+        #expect(box.tokenStore.token == nil)
+        #expect(!box.manager.hasApiToken)
+    }
+
+    /// A 2.0 install keeps its token: the plaintext preference is moved
+    /// into the Keychain the first time it is read
+    @Test func legacyPlaintextTokenMigratesIntoTheStore() {
+        let box = Sandbox()
+        defer { box.tearDown() }
+        box.defaults.set("legacy-token", forKey: "apiToken")
+
+        #expect(box.manager.apiToken == "legacy-token")
+        #expect(box.tokenStore.token == "legacy-token")
+        #expect(box.defaults.string(forKey: "apiToken") == nil)
+    }
+
+    /// A Keychain token wins over a stale preference value
+    @Test func storeTokenTakesPrecedenceOverPreference() {
+        let box = Sandbox(token: "keychain-token")
+        defer { box.tearDown() }
+        box.defaults.set("stale", forKey: "apiToken")
+
+        #expect(box.manager.apiToken == "keychain-token")
     }
 
     @Test func hasApiTokenEmptyString() {
@@ -114,5 +157,29 @@ struct SettingsManagerTests {
         // 1.x stored "api" for what is now Standard mode
         box.defaults.set("api", forKey: "appMode")
         #expect(box.manager.appMode == .standard)
+    }
+}
+
+
+// MARK: - Keychain
+
+/// Round trip through the real Keychain from inside the sandboxed test host,
+/// under a service name that is unique to this run and removed afterwards.
+struct KeychainTokenStoreTests {
+
+    @Test func writeReadUpdateDelete() {
+        let store = KeychainTokenStore(service: "com.kpgbr.AuphonicAppTests.\(UUID().uuidString)")
+        defer { store.writeToken(nil) }
+
+        #expect(store.readToken() == nil)
+
+        store.writeToken("first")
+        #expect(store.readToken() == "first")
+
+        store.writeToken("second")
+        #expect(store.readToken() == "second")
+
+        store.writeToken(nil)
+        #expect(store.readToken() == nil)
     }
 }
