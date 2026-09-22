@@ -28,6 +28,7 @@ nonisolated enum ZipArchive {
 
     struct Entry {
         let name: String
+        let compressedSize: Int
         let uncompressedSize: Int
         let compressionMethod: UInt16
         let localHeaderOffset: Int
@@ -103,13 +104,15 @@ nonisolated enum ZipArchive {
             }
 
             let method = data.readUInt16(at: cursor + 10)
+            let compressedSize = Int(data.readUInt32(at: cursor + 20))
             let uncompressedSize = Int(data.readUInt32(at: cursor + 24))
             let nameLength = Int(data.readUInt16(at: cursor + 28))
             let extraLength = Int(data.readUInt16(at: cursor + 30))
             let commentLength = Int(data.readUInt16(at: cursor + 32))
             let localOffset = Int(data.readUInt32(at: cursor + 42))
 
-            guard localOffset != 0xFFFF_FFFF, uncompressedSize != 0xFFFF_FFFF else {
+            guard localOffset != 0xFFFF_FFFF, compressedSize != 0xFFFF_FFFF,
+                  uncompressedSize != 0xFFFF_FFFF else {
                 throw ZipArchiveError.zip64NotSupported
             }
 
@@ -121,6 +124,7 @@ nonisolated enum ZipArchive {
 
             entries.append(Entry(
                 name: name,
+                compressedSize: compressedSize,
                 uncompressedSize: uncompressedSize,
                 compressionMethod: method,
                 localHeaderOffset: localOffset
@@ -134,8 +138,11 @@ nonisolated enum ZipArchive {
 
     // MARK: - Entry Payload
 
-    /// Read (and inflate if needed) one entry's bytes. Sizes come from the
-    /// local header, which is authoritative for the stored bytes.
+    /// Read (and inflate if needed) one entry's bytes. The sizes come from
+    /// the central directory: streamed entries (general-purpose flag bit 3,
+    /// which is how servers typically zip on the fly) carry zeros in the
+    /// local header and only put the real sizes in a data descriptor that
+    /// trails the payload. The local header is used only to find the payload.
     private static func payload(for entry: Entry, in data: Data) throws -> Data {
         let header = entry.localHeaderOffset
         guard header + 30 <= data.count,
@@ -145,16 +152,8 @@ nonisolated enum ZipArchive {
 
         let nameLength = Int(data.readUInt16(at: header + 26))
         let extraLength = Int(data.readUInt16(at: header + 28))
-        var compressedSize = Int(data.readUInt32(at: header + 18))
-        var uncompressedSize = Int(data.readUInt32(at: header + 22))
-
-        // Streamed entries put the sizes in a trailing data descriptor;
-        // fall back to the central directory values in that case.
-        if compressedSize == 0 && uncompressedSize == 0 {
-            uncompressedSize = entry.uncompressedSize
-            compressedSize = data.count - (header + 30 + nameLength + extraLength)
-        }
-        if uncompressedSize == 0 { uncompressedSize = entry.uncompressedSize }
+        let compressedSize = entry.compressedSize
+        let uncompressedSize = entry.uncompressedSize
 
         let start = header + 30 + nameLength + extraLength
         guard start + compressedSize <= data.count else {
@@ -164,6 +163,9 @@ nonisolated enum ZipArchive {
 
         switch entry.compressionMethod {
         case 0:
+            guard compressedSize == uncompressedSize else {
+                throw ZipArchiveError.corrupt("stored entry \(entry.name) has mismatched sizes")
+            }
             return Data(compressed)
         case 8:
             return try inflate(Data(compressed), uncompressedSize: uncompressedSize)

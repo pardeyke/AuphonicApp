@@ -281,6 +281,80 @@ struct ZipArchiveTests {
         #expect(try Data(contentsOf: try #require(byName["Track 2.wav"])) == random)
     }
 
+    // MARK: Hand-built archives (no dependency on /usr/bin/zip)
+
+    /// Minimal stored-only zip writer. `streamed` entries get general-purpose
+    /// flag bit 3: zero sizes in the local header and a trailing data
+    /// descriptor, which is how Auphonic's server-side zips look.
+    private func buildStoredZip(_ files: [(name: String, data: Data, streamed: Bool)]) -> Data {
+        func le16(_ v: Int) -> [UInt8] { [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF)] }
+        func le32(_ v: Int) -> [UInt8] { le16(v & 0xFFFF) + le16((v >> 16) & 0xFFFF) }
+
+        var out: [UInt8] = []
+        var central: [UInt8] = []
+
+        for file in files {
+            let name = Array(file.name.utf8)
+            let flags = file.streamed ? 0x0008 : 0
+            let localOffset = out.count
+            let sizes = file.streamed ? le32(0) + le32(0) : le32(file.data.count) + le32(file.data.count)
+
+            out += le32(0x0403_4b50) + le16(20) + le16(flags) + le16(0) + le16(0) + le16(0)
+            out += le32(0) + sizes + le16(name.count) + le16(0) + name
+            out += Array(file.data)
+            if file.streamed {
+                out += le32(0x0807_4b50) + le32(0) + le32(file.data.count) + le32(file.data.count)
+            }
+
+            central += le32(0x0201_4b50) + le16(20) + le16(20) + le16(flags) + le16(0) + le16(0) + le16(0)
+            central += le32(0) + le32(file.data.count) + le32(file.data.count)
+            central += le16(name.count) + le16(0) + le16(0) + le16(0) + le16(0) + le32(0)
+            central += le32(localOffset) + name
+        }
+
+        let directoryOffset = out.count
+        out += central
+        out += le32(0x0605_4b50) + le16(0) + le16(0) + le16(files.count) + le16(files.count)
+        out += le32(central.count) + le32(directoryOffset) + le16(0)
+        return Data(out)
+    }
+
+    private func extract(_ zip: Data) throws -> [String: Data] {
+        let workDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("zip_test_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workDir) }
+
+        let archive = workDir.appendingPathComponent("archive.zip")
+        try zip.write(to: archive)
+        let written = try ZipArchive.extract(archive, to: workDir.appendingPathComponent("out", isDirectory: true))
+        return try Dictionary(uniqueKeysWithValues: written.map { ($0.lastPathComponent, try Data(contentsOf: $0)) })
+    }
+
+    /// A streamed entry used to come back as "everything up to the end of the
+    /// archive": descriptor, following entries and central directory included.
+    @Test func streamedEntriesUseCentralDirectorySizes() throws {
+        let one = Data(repeating: 0xA1, count: 1500)
+        let two = Data(repeating: 0xB2, count: 700)
+        let zip = buildStoredZip([("ch1.wav", one, true), ("ch2.wav", two, true)])
+
+        let files = try extract(zip)
+        #expect(files.count == 2)
+        #expect(files["ch1.wav"] == one)
+        #expect(files["ch2.wav"] == two)
+    }
+
+    @Test func plainStoredEntriesStillExtract() throws {
+        let one = Data("first".utf8)
+        let empty = Data()
+        let zip = buildStoredZip([("a.txt", one, false), ("empty.txt", empty, false), ("b.txt", Data("b".utf8), true)])
+
+        let files = try extract(zip)
+        #expect(files["a.txt"] == one)
+        #expect(files["empty.txt"] == empty)
+        #expect(files["b.txt"] == Data("b".utf8))
+    }
+
     @Test func rejectsNonZipData() throws {
         let bogus = FileManager.default.temporaryDirectory
             .appendingPathComponent("not_a_zip_\(UUID().uuidString).zip")
