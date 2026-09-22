@@ -75,40 +75,44 @@ struct ChannelConfigView: View {
             SettingsGroupLabel(text: "Channels")
 
             // Channel pills wrap to as many rows as needed
-            FlowLayout(spacing: 6) {
-                ForEach(config.channels) { channel in
-                    GlassCheckbox(
-                        label: channel.displayName,
-                        isOn: Binding(
-                            get: { channel.enabled },
-                            set: { channel.enabled = $0; onChange?() }
-                        ),
-                        systemImage: "waveform"
-                    )
+            GlassEffectContainer(spacing: GlassSpacing.chips) {
+                FlowLayout(spacing: 6) {
+                    ForEach(config.channels) { channel in
+                        GlassCheckbox(
+                            label: channel.displayName,
+                            isOn: Binding(
+                                get: { channel.enabled },
+                                set: { channel.enabled = $0; onChange?() }
+                            ),
+                            systemImage: "waveform"
+                        )
+                    }
                 }
             }
         }
     }
 
     private var optionChips: some View {
-        FlowLayout(spacing: 6) {
-            GlassCheckbox(
-                label: "Link settings",
-                isOn: Binding(
-                    get: { config.linkedSettings },
-                    set: { config.linkedSettings = $0; onChange?() }
-                ),
-                systemImage: "link"
-            )
+        GlassEffectContainer(spacing: GlassSpacing.chips) {
+            FlowLayout(spacing: 6) {
+                GlassCheckbox(
+                    label: "Link settings",
+                    isOn: Binding(
+                        get: { config.linkedSettings },
+                        set: { config.linkedSettings = $0; onChange?() }
+                    ),
+                    systemImage: "link"
+                )
 
-            GlassCheckbox(
-                label: "Settings JSON",
-                isOn: Binding(
-                    get: { config.writeSettingsXml },
-                    set: { config.writeSettingsXml = $0 }
-                ),
-                systemImage: "doc.text"
-            )
+                GlassCheckbox(
+                    label: "Settings JSON",
+                    isOn: Binding(
+                        get: { config.writeSettingsXml },
+                        set: { config.writeSettingsXml = $0 }
+                    ),
+                    systemImage: "doc.text"
+                )
+            }
         }
     }
 
@@ -231,9 +235,11 @@ struct ChannelConfigView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     // Per-channel tabs as glass chips
-                    FlowLayout(spacing: 6) {
-                        ForEach(enabledChannels) { channel in
-                            channelTab(channel, isSelected: tabChannel(in: enabledChannels)?.id == channel.id)
+                    GlassEffectContainer(spacing: GlassSpacing.chips) {
+                        FlowLayout(spacing: 6) {
+                            ForEach(enabledChannels) { channel in
+                                channelTab(channel, isSelected: tabChannel(in: enabledChannels)?.id == channel.id)
+                            }
                         }
                     }
 
@@ -259,7 +265,7 @@ struct ChannelConfigView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .glassEffect(
-                    isSelected ? .regular.tint(.accentColor.opacity(0.8)) : .regular,
+                    isSelected ? .regular.tint(.accentColor.opacity(0.8)).interactive() : .regular.interactive(),
                     in: .rect(cornerRadius: 9)
                 )
         }

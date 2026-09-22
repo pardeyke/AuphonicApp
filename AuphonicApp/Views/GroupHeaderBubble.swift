@@ -86,9 +86,10 @@ struct GroupHeaderBubble: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Translucent so the file rows stay visible scrolling behind it
+        // Translucent so the file rows stay visible scrolling behind it;
+        // interactive because tapping the bubble selects the group
         .glassEffect(
-            isSelected ? .regular.tint(.blue.opacity(0.8)) : .regular,
+            isSelected ? .regular.tint(.blue.opacity(0.8)).interactive() : .regular.interactive(),
             in: .rect(cornerRadius: Self.cornerRadius)
         )
         .padding(.vertical, 4)

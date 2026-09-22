@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Checkbox styled as a Liquid Glass pill. Used for channel selection and
-/// the boolean options of the processing settings.
+/// the boolean options of the processing settings. Put rows of these inside
+/// a `GlassEffectContainer` so they render as one glass layer.
 struct GlassCheckbox: View {
     let label: String
     @Binding var isOn: Bool
@@ -31,12 +32,18 @@ struct GlassCheckbox: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .glassEffect(
-                isOn ? .regular.tint(tint.opacity(0.8)) : .regular,
+                isOn ? .regular.tint(tint.opacity(0.8)).interactive() : .regular.interactive(),
                 in: .rect(cornerRadius: 9)
             )
         }
         .buttonStyle(.plain)
     }
+}
+
+/// Distance below which neighbouring glass shapes in one container start to
+/// blend. Chips sit 6 pt apart and should stay distinct, so this is smaller.
+enum GlassSpacing {
+    static let chips: CGFloat = 2
 }
 
 /// Section heading with an optional trailing accessory
@@ -91,14 +98,18 @@ struct SettingsGroupLabel: View {
 
                 SettingsGroupLabel(text: "Channels")
 
-                HStack(spacing: 8) {
-                    GlassCheckbox(label: "Ch 1 (BOOM)", isOn: .constant(true), systemImage: "waveform")
-                    GlassCheckbox(label: "Ch 2 (LAVMIX)", isOn: .constant(false), systemImage: "waveform")
+                GlassEffectContainer(spacing: GlassSpacing.chips) {
+                    HStack(spacing: 8) {
+                        GlassCheckbox(label: "Ch 1 (BOOM)", isOn: .constant(true), systemImage: "waveform")
+                        GlassCheckbox(label: "Ch 2 (LAVMIX)", isOn: .constant(false), systemImage: "waveform")
+                    }
                 }
 
-                HStack(spacing: 8) {
-                    GlassCheckbox(label: "Link settings", isOn: $a)
-                    GlassCheckbox(label: "Settings JSON", isOn: $b)
+                GlassEffectContainer(spacing: GlassSpacing.chips) {
+                    HStack(spacing: 8) {
+                        GlassCheckbox(label: "Link settings", isOn: $a)
+                        GlassCheckbox(label: "Settings JSON", isOn: $b)
+                    }
                 }
             }
             .padding(16)

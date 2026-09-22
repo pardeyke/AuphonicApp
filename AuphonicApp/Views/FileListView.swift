@@ -115,32 +115,35 @@ struct FileListView: View {
     /// prevents rows from scrolling behind the translucent glass bubble.
     private var groupedList: some View {
         ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                ForEach(viewModel.groups) { group in
-                    Section {
-                        if !collapsedGroupIDs.contains(group.id) {
-                            ForEach(Array(group.files.enumerated()), id: \.element.id) { index, file in
-                                fileRowContainer(file)
-                                    // The gap to the next group hangs off the
-                                    // last row, so collapsed groups sit flush
-                                    .padding(.bottom, index == group.files.count - 1 ? 10 : 0)
+            // One glass layer for all group bubbles
+            GlassEffectContainer(spacing: GlassSpacing.chips) {
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    ForEach(viewModel.groups) { group in
+                        Section {
+                            if !collapsedGroupIDs.contains(group.id) {
+                                ForEach(Array(group.files.enumerated()), id: \.element.id) { index, file in
+                                    fileRowContainer(file)
+                                        // The gap to the next group hangs off the
+                                        // last row, so collapsed groups sit flush
+                                        .padding(.bottom, index == group.files.count - 1 ? 10 : 0)
+                                }
                             }
+                        } header: {
+                            groupHeaderRow(group)
+                                .padding(.horizontal, 8)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    // Clicking an inactive group makes it the
+                                    // configured one by selecting its first take
+                                    guard viewModel.selectedGroupID != group.id,
+                                          let first = group.files.first else { return }
+                                    viewModel.selectFile(first)
+                                }
                         }
-                    } header: {
-                        groupHeaderRow(group)
-                            .padding(.horizontal, 8)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                // Clicking an inactive group makes it the
-                                // configured one by selecting its first take
-                                guard viewModel.selectedGroupID != group.id,
-                                      let first = group.files.first else { return }
-                                viewModel.selectFile(first)
-                            }
                     }
                 }
+                .padding(.top, 4)
             }
-            .padding(.top, 4)
         }
         .scrollContentBackground(.hidden)
     }

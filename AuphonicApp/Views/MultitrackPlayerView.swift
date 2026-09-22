@@ -38,9 +38,12 @@ struct MultitrackPlayerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
-            transportBar
-            trackLanes
+        // Transport and channel strips share one glass layer
+        GlassEffectContainer(spacing: GlassSpacing.chips) {
+            VStack(spacing: 8) {
+                transportBar
+                trackLanes
+            }
         }
     }
 
