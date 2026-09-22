@@ -24,7 +24,7 @@ enum ZipArchiveError: LocalizedError {
 /// Minimal read-only ZIP reader for Auphonic's individual-tracks archive.
 /// Supports the two methods Auphonic uses — stored (0) and deflate (8) —
 /// without external dependencies, so it works inside the app sandbox.
-enum ZipArchive {
+nonisolated enum ZipArchive {
 
     struct Entry {
         let name: String
@@ -198,7 +198,7 @@ enum ZipArchive {
 
 // MARK: - Little-endian readers
 
-private extension Data {
+nonisolated private extension Data {
     func readUInt16(at offset: Int) -> UInt16 {
         let base = startIndex + offset
         guard base + 2 <= endIndex else { return 0 }

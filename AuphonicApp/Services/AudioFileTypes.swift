@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 /// This is only the cheap pre-filter used by the open panel, drag & drop and
 /// folder scans. Whether a file really decodes is decided when `AVAudioFile`
 /// opens it in `BatchFile.init`, and unreadable files are reported there.
-enum AudioFileTypes {
+nonisolated enum AudioFileTypes {
     /// Fallback for files whose content type the system cannot resolve, e.g.
     /// recorder cards that hand out extensions without a registered type.
     static let knownExtensions: Set<String> = [

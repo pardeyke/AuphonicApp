@@ -30,7 +30,7 @@ enum ChannelReplacerError: LocalizedError {
 /// untouched channel samples stay bit-perfect), then only the samples of the
 /// replaced channels are patched inside the data chunk, converted to the
 /// original file's sample format.
-enum ChannelReplacer {
+nonisolated enum ChannelReplacer {
 
     /// - Parameters:
     ///   - original: source multichannel WAV (never modified)
@@ -204,7 +204,7 @@ enum ChannelReplacer {
     }
 }
 
-private extension Double {
+nonisolated private extension Double {
     func clamped(to range: ClosedRange<Double>) -> Double {
         Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }

@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 
-enum WavChunkCopier {
+nonisolated enum WavChunkCopier {
 
     // MARK: - Read Chunks
 
@@ -547,7 +547,7 @@ enum WavChunkCopier {
 
 // MARK: - iXML Track Name Parser
 
-private class IXMLTrackParser: NSObject, XMLParserDelegate {
+nonisolated private final class IXMLTrackParser: NSObject, XMLParserDelegate {
     var trackNames: [String] = []
     private var currentElement = ""
     private var currentInterleaveIndex = 0

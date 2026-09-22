@@ -29,7 +29,7 @@ final class BatchFile: Identifiable {
     var status: BatchFileStatus = .pending
     var progress: Double = 0        // 0-1 while processing
 
-    init?(url: URL) {
+    nonisolated init?(url: URL) {
         guard let audioFile = try? AVAudioFile(forReading: url) else { return nil }
 
         self.url = url
