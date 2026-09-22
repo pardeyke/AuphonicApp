@@ -55,6 +55,16 @@ final class CuttingOptions {
         algorithms["fadetime"] = fadeTime
     }
 
+    /// Switch every cutter off explicitly. Mix Preparation uses this so a
+    /// preset that has cutting enabled cannot shorten a processed channel:
+    /// explicit algorithm keys override the preset's values on the API.
+    static func disableAll(in algorithms: inout [String: Any]) {
+        algorithms["silence_cutter"] = false
+        algorithms["filler_cutter"] = false
+        algorithms["cough_cutter"] = false
+        algorithms["music_cutter"] = false
+    }
+
     /// Restore the UI state from a preset's algorithms
     func applyApiSettings(_ algorithms: [String: Any]) {
         cutSilence = (algorithms["silence_cutter"] as? Bool) ?? false

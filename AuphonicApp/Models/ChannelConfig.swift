@@ -210,11 +210,17 @@ final class ChannelConfig {
     }
 
     /// Settings dict for an upload job. Output is always forced to WAV so the
-    /// processed channels can be written back into the original container.
+    /// processed channels can be written back into the original container,
+    /// and the cutters are forced off so the channel keeps its length even
+    /// when the selected preset has cutting enabled.
     func settingsForJob(_ job: UploadJob) -> [String: Any] {
         let opts = optionsForJob(job)
         var settings = opts.getSettings()
         settings["output_files"] = [["format": forcedWavFormat]]
+
+        var algorithms = (settings["algorithms"] as? [String: Any]) ?? [:]
+        CuttingOptions.disableAll(in: &algorithms)
+        settings["algorithms"] = algorithms
         return settings
     }
 

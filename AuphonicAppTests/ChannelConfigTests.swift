@@ -81,6 +81,23 @@ struct ChannelConfigTests {
         #expect(settings["bitrate"] == nil)
     }
 
+    /// A preset with cutting enabled must not shorten a processed channel:
+    /// the job always sends the cutters switched off explicitly.
+    @Test func settingsForJobForcesCuttersOff() {
+        let config = makeConfig(channels: 2)
+        config.selectedPresetUuid = "podcast-preset-with-cutting"
+        config.presetModified = false
+        let job = config.uploadJobs[0]
+
+        #expect(config.presetUuidForJob(job) == "podcast-preset-with-cutting")
+
+        let algorithms = config.settingsForJob(job)["algorithms"] as? [String: Any]
+        #expect(algorithms?["silence_cutter"] as? Bool == false)
+        #expect(algorithms?["filler_cutter"] as? Bool == false)
+        #expect(algorithms?["cough_cutter"] as? Bool == false)
+        #expect(algorithms?["music_cutter"] as? Bool == false)
+    }
+
     @Test func settingsForJobUses16BitFor16BitSource() {
         let config = makeConfig(channels: 3, bitDepth: 16)
         let settings = config.settingsForJob(config.uploadJobs[0])
