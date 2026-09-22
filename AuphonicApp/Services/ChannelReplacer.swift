@@ -51,6 +51,10 @@ nonisolated enum ChannelReplacer {
         }
 
         try FileManager.default.copyItem(at: original, to: output)
+        // The copy inherits the original's permissions; takes pulled from a
+        // read-only card or archive would make the patching below fail
+        // after every production has already been billed
+        try Self.makeWritable(output)
         do {
             try patchChannels(in: output, replacements: replacements)
         } catch {
@@ -169,12 +173,25 @@ nonisolated enum ChannelReplacer {
     }
 
     /// Convert a float sample to the output file's sample format and store it (little-endian)
+    /// Adds owner write permission to a file we just copied
+    private static func makeWritable(_ url: URL) throws {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let mode = (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o644
+        if mode & 0o200 == 0 {
+            try FileManager.default.setAttributes([.posixPermissions: mode | 0o200], ofItemAtPath: url.path)
+        }
+    }
+
     private static func store(
         sample: Float,
         into raw: UnsafeMutableRawBufferPointer,
         at offset: Int,
         format: SampleFormat
     ) {
+        // NaN and infinity cannot be converted to an integer sample (the
+        // conversion traps); write silence for them instead
+        let sample = sample.isFinite ? sample : 0
+
         if format.isFloat {
             if format.bitsPerSample == 32 {
                 raw.storeBytes(of: sample.bitPattern.littleEndian, toByteOffset: offset, as: UInt32.self)

@@ -18,7 +18,7 @@ nonisolated enum WavChunkCopier {
         var offset: UInt64 = 12
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? UInt64) ?? 0
 
-        while offset < fileSize - 8 {
+        while offset + 8 <= fileSize {
             handle.seek(toFileOffset: offset)
             guard let chunkHeader = try? handle.read(upToCount: 8),
                   chunkHeader.count == 8 else { break }
@@ -550,6 +550,11 @@ nonisolated enum WavChunkCopier {
 // MARK: - iXML Track Name Parser
 
 nonisolated private final class IXMLTrackParser: NSObject, XMLParserDelegate {
+    /// Highest interleave index accepted. WAV carries at most 65535 channels
+    /// and real recorders a handful; a malformed index like 2000000000 used
+    /// to allocate that many strings just by adding the file.
+    static let maxInterleaveIndex = 256
+
     var trackNames: [String] = []
     private var currentElement = ""
     private var currentInterleaveIndex = 0
@@ -587,11 +592,13 @@ nonisolated private final class IXMLTrackParser: NSObject, XMLParserDelegate {
                 currentTrackName = charBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
             } else if element == "TRACK" {
                 inTrack = false
-                // Ensure array is large enough (index is 1-based physical position)
-                while trackNames.count <= currentInterleaveIndex {
-                    trackNames.append("")
+                // Index is the 1-based physical position; ignore nonsense values
+                if (1...Self.maxInterleaveIndex).contains(currentInterleaveIndex) {
+                    while trackNames.count <= currentInterleaveIndex {
+                        trackNames.append("")
+                    }
+                    trackNames[currentInterleaveIndex] = currentTrackName
                 }
-                trackNames[currentInterleaveIndex] = currentTrackName
             }
         }
         charBuffer = ""

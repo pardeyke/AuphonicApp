@@ -289,6 +289,56 @@ struct ChannelReplacerTests {
         #expect(WavChunkCopier.readBextTimeReference(from: output) == 123456789)
     }
 
+    /// NaN or infinite samples in a float processed file must become
+    /// silence, not trap in the integer conversion
+    @Test func nonFiniteSamplesBecomeSilence() throws {
+        let original = tempWavURL()
+        let processed = tempWavURL()
+        let output = tempWavURL()
+        defer { for f in [original, processed, output] { try? FileManager.default.removeItem(at: f) } }
+
+        try makeWav(url: original, channels: 2, bitDepth: 24) { _ in 0.3 }
+        try makeWav(url: processed, channels: 1, bitDepth: 32, isFloat: true) { _ in .nan }
+
+        try ChannelReplacer.replaceChannels(
+            original: original,
+            output: output,
+            replacements: [(channelIndices: [2], file: processed)]
+        )
+
+        let ch1 = try readChannel(output, channel: 0)
+        let ch2 = try readChannel(output, channel: 1)
+        #expect(abs(ch1[0] - 0.3) < 1e-5)
+        #expect(ch2.allSatisfy { $0 == 0 })
+    }
+
+    /// Originals pulled from a read-only card keep 0444; the copy must still
+    /// be patchable, otherwise the failure only shows after billing
+    @Test func readOnlyOriginalStillProducesOutput() throws {
+        let original = tempWavURL()
+        let processed = tempWavURL()
+        let output = tempWavURL()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: original.path)
+            for f in [original, processed, output] { try? FileManager.default.removeItem(at: f) }
+        }
+
+        try makeWav(url: original, channels: 2, bitDepth: 24) { _ in 0.1 }
+        try makeWav(url: processed, channels: 1, bitDepth: 24) { _ in 0.9 }
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: original.path)
+
+        try ChannelReplacer.replaceChannels(
+            original: original,
+            output: output,
+            replacements: [(channelIndices: [1], file: processed)]
+        )
+
+        let ch1 = try readChannel(output, channel: 0)
+        #expect(abs(ch1[0] - 0.9) < 1e-5)
+        let mode = try #require(FileManager.default.attributesOfItem(atPath: output.path)[.posixPermissions] as? NSNumber)
+        #expect(mode.intValue & 0o200 != 0)
+    }
+
     @Test func preserves32BitFloatContainer() throws {
         let original = tempWavURL()
         let processed = tempWavURL()

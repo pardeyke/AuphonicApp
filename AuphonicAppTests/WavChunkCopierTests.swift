@@ -217,6 +217,38 @@ struct WavChunkCopierTests {
         #expect(names[3] == "Lav2")
     }
 
+    /// A malformed interleave index used to allocate that many strings
+    @Test func readIxmlTrackNamesIgnoresAbsurdIndices() {
+        let ixml = """
+        <BWFXML><TRACK_LIST>
+            <TRACK><INTERLEAVE_INDEX>2000000000</INTERLEAVE_INDEX><NAME>Bogus</NAME></TRACK>
+            <TRACK><INTERLEAVE_INDEX>-1</INTERLEAVE_INDEX><NAME>Negative</NAME></TRACK>
+            <TRACK><INTERLEAVE_INDEX>0</INTERLEAVE_INDEX><NAME>Zero</NAME></TRACK>
+            <TRACK><INTERLEAVE_INDEX>2</INTERLEAVE_INDEX><NAME>Lav</NAME></TRACK>
+        </TRACK_LIST></BWFXML>
+        """
+        let file = createTestWavFile(channels: 2, extraChunks: [("iXML", Data(ixml.utf8))])
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let names = WavChunkCopier.readIxmlTrackNames(from: file)
+        #expect(names.count == 3)
+        #expect(names[2] == "Lav")
+        #expect(!names.contains("Bogus"))
+        #expect(!names.contains("Negative"))
+        #expect(!names.contains("Zero"))
+    }
+
+    @Test func readChunkOnTruncatedHeaderReturnsNil() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("short_\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        try Data("RIFF\u{0}\u{0}\u{0}\u{0}WAVE".utf8).write(to: url)     // exactly 12 bytes
+        #expect(WavChunkCopier.readChunk(from: url, chunkId: "fmt ") == nil)
+
+        try Data("RIFF".utf8).write(to: url)                                 // shorter than a header
+        #expect(WavChunkCopier.readChunk(from: url, chunkId: "fmt ") == nil)
+    }
+
     @Test func readIxmlTrackNamesNoIxml() {
         let file = createTestWavFile()
         defer { try? FileManager.default.removeItem(at: file) }
