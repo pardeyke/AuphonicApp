@@ -1,91 +1,83 @@
 import SwiftUI
 
+/// Content of the Settings scene. Changes apply immediately, as in a system
+/// settings window; the token is committed when the field loses focus or on
+/// Return, so a half-typed token never triggers a connection attempt.
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @Bindable var settingsManager: SettingsManager
     var audioPlayer: AudioPlayerService
-    var onSave: () -> Void
+    var onTokenChanged: () -> Void
 
-    @State private var token: String = ""
-    @State private var selectedDeviceName: String = ""
+    @State private var token = ""
     @State private var devices: [AudioPlayerService.AudioDevice] = []
-    @State private var deleteProductions = false
+    @FocusState private var tokenFieldFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Settings")
-                .font(.headline)
-
-            // API Token
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Auphonic API Token")
-                    .font(.system(size: 12, weight: .medium))
-
-                SecureField("Enter API token", text: $token)
-                    .textFieldStyle(.roundedBorder)
+        Form {
+            Section("Auphonic Account") {
+                SecureField("API Token", text: $token)
+                    .focused($tokenFieldFocused)
+                    .onSubmit(commitToken)
+                    .onChange(of: tokenFieldFocused) { _, focused in
+                        if !focused { commitToken() }
+                    }
 
                 Link("Get your API token at auphonic.com",
                      destination: URL(string: "https://auphonic.com/accounts/settings#api-key")!)
-                    .font(.system(size: 11))
+                    .font(.callout)
             }
 
-            // Output Device
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Audio Output Device")
-                    .font(.system(size: 12, weight: .medium))
-
-                Picker("", selection: $selectedDeviceName) {
+            Section("Playback") {
+                Picker("Output Device", selection: outputDevice) {
                     Text("System Default").tag("")
                     ForEach(devices) { device in
                         Text(device.name).tag(device.name)
                     }
                 }
-                .labelsHidden()
             }
 
-            // Housekeeping
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Delete productions on Auphonic after download", isOn: $deleteProductions)
-                    .font(.system(size: 12))
-
+            Section {
+                Toggle("Delete productions on Auphonic after download",
+                       isOn: $settingsManager.deleteProductionsAfterDownload)
                 Text("Removes each production from your Auphonic account once its audio has been downloaded and written to the output file. Failed files keep their productions.")
-                    .font(.system(size: 10))
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button("Save") {
-                    settingsManager.apiToken = token
-                    settingsManager.audioOutputDevice = selectedDeviceName
-                    settingsManager.deleteProductionsAfterDownload = deleteProductions
-
-                    // Apply output device
-                    if let device = devices.first(where: { $0.name == selectedDeviceName }) {
-                        audioPlayer.setOutputDevice(device.id)
-                    }
-
-                    onSave()
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
+            } header: {
+                Text("Housekeeping")
             }
         }
-        .padding(20)
-        .frame(width: 400, height: 340)
+        .formStyle(.grouped)
+        .frame(width: 480)
         .onAppear {
             token = settingsManager.apiToken
-            selectedDeviceName = settingsManager.audioOutputDevice
-            deleteProductions = settingsManager.deleteProductionsAfterDownload
             devices = AudioPlayerService.availableOutputDevices()
         }
+        .onDisappear(perform: commitToken)
     }
+
+    /// Stored device name; "" is the system default. Applied right away.
+    private var outputDevice: Binding<String> {
+        Binding(
+            get: {
+                // A stored device that is no longer connected shows as default
+                devices.contains { $0.name == settingsManager.audioOutputDevice }
+                    ? settingsManager.audioOutputDevice : ""
+            },
+            set: { name in
+                settingsManager.audioOutputDevice = name
+                audioPlayer.applyOutputDevice(named: name)
+            }
+        )
+    }
+
+    private func commitToken() {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != settingsManager.apiToken else { return }
+        settingsManager.apiToken = trimmed
+        onTokenChanged()
+    }
+}
+
+#Preview("Settings") {
+    SettingsView(settingsManager: SettingsManager(), audioPlayer: AudioPlayerService(), onTokenChanged: {})
 }

@@ -32,7 +32,6 @@ final class AppViewModel {
     var credits: UserCredits?
 
     // UI state
-    var showingSettings = false
     var showingSavePreset = false
     var savePresetName = ""
     var alertMessage = ""
@@ -58,6 +57,7 @@ final class AppViewModel {
     init() {
         apiClient.token = settingsManager.apiToken
         mode = settingsManager.appMode
+        audioPlayer.applyOutputDevice(named: settingsManager.audioOutputDevice)
     }
 
     // MARK: - Connection

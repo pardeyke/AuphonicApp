@@ -1,9 +1,10 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State var viewModel = AppViewModel()
+    @Bindable var viewModel: AppViewModel
     @State private var sidebarWidth: CGFloat = MainWindowSize.sidebarIdealWidth
     @FocusState private var focused: Bool
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         NavigationSplitView {
@@ -87,12 +88,6 @@ struct ContentView: View {
                 .visibilityPriority(.automatic)
             }
         }
-        .sheet(isPresented: $viewModel.showingSettings) {
-            SettingsView(settingsManager: viewModel.settingsManager, audioPlayer: viewModel.audioPlayer) {
-                viewModel.apiClient.token = viewModel.settingsManager.apiToken
-                Task { await viewModel.connectAndFetch() }
-            }
-        }
         .alert("Save Preset", isPresented: $viewModel.showingSavePreset) {
             TextField("Preset name", text: $viewModel.savePresetName)
             Button("Save") {
@@ -107,7 +102,7 @@ struct ContentView: View {
         .alert("AuphonicApp", isPresented: $viewModel.showingAlert) {
             if viewModel.alertOffersSettings {
                 Button("Open Settings…") {
-                    viewModel.showingSettings = true
+                    openSettings()
                 }
             }
             Button("OK", role: .cancel) {}
@@ -118,9 +113,6 @@ struct ContentView: View {
         .task {
             focused = false
             await viewModel.connectAndFetch()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
-            viewModel.showingSettings = true
         }
         .onAppear {
             NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -228,6 +220,6 @@ struct ContentView: View {
 }
 
 #Preview("Split layout") {
-    ContentView()
+    ContentView(viewModel: AppViewModel())
         .frame(width: 1080, height: 760)
 }

@@ -528,6 +528,27 @@ final class AudioPlayerService {
         return result
     }
 
+    /// The device CoreAudio currently routes default output to
+    static func systemDefaultOutputDevice() -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
+        return status == noErr && deviceID != 0 ? deviceID : nil
+    }
+
+    /// Route playback to the device stored in the settings: by name, or the
+    /// system default when the name is empty or the device is not connected.
+    func applyOutputDevice(named name: String) {
+        let device = name.isEmpty ? nil : Self.availableOutputDevices().first { $0.name == name }
+        guard let deviceID = device?.id ?? Self.systemDefaultOutputDevice() else { return }
+        setOutputDevice(deviceID)
+    }
+
     func setOutputDevice(_ deviceID: AudioDeviceID) {
         let wasPlaying = isPlaying
         let savedFrame = currentFrame
