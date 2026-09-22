@@ -262,8 +262,7 @@ struct ManualOptionsStateTests {
         let opts = ManualOptionsState()
         opts.outputFormat = .keep
         let settings = opts.getSettings()
-        // "keep" should omit output_format
-        #expect(settings["output_format"] == nil)
+        // "keep" omits output_files so Auphonic keeps the input format
         #expect(settings["output_files"] == nil)
     }
 
@@ -271,9 +270,10 @@ struct ManualOptionsStateTests {
         let opts = ManualOptionsState()
         opts.outputFormat = .wav24
         let settings = opts.getSettings()
-        #expect(settings["output_format"] as? String == "wav-24bit")
         let outputFiles = settings["output_files"] as? [[String: Any]]
+        #expect(outputFiles?.count == 1)
         #expect(outputFiles?.first?["format"] as? String == "wav-24bit")
+        #expect(outputFiles?.first?["bitrate"] == nil)
     }
 
     @Test func getSettingsMp3FormatWithBitrate() {
@@ -281,9 +281,11 @@ struct ManualOptionsStateTests {
         opts.outputFormat = .mp3
         opts.bitrate = 256
         let settings = opts.getSettings()
-        #expect(settings["output_format"] as? String == "mp3")
-        #expect(settings["bitrate"] as? String == "256")
+        // The app-internal keys must not leak into the request
+        #expect(settings["output_format"] == nil)
+        #expect(settings["bitrate"] == nil)
         let outputFiles = settings["output_files"] as? [[String: Any]]
+        #expect(outputFiles?.first?["format"] as? String == "mp3")
         #expect(outputFiles?.first?["bitrate"] as? String == "256")
     }
 
@@ -292,7 +294,8 @@ struct ManualOptionsStateTests {
         opts.forcedOutputFormat = "wav-24bit"
         opts.outputFormat = .mp3 // Should be ignored
         let settings = opts.getSettings()
-        #expect(settings["output_format"] as? String == "wav-24bit")
+        let outputFiles = settings["output_files"] as? [[String: Any]]
+        #expect(outputFiles?.first?["format"] as? String == "wav-24bit")
     }
 
     // MARK: - Widget State Persistence

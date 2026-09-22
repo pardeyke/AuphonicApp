@@ -74,13 +74,18 @@ struct ChannelConfigTests {
         config.sharedOptions.levelerEnabled = true
         let job = config.uploadJobs[0]
         let settings = config.settingsForJob(job)
-        #expect(settings["output_format"] as? String == "wav-24bit")
+        let outputFiles = settings["output_files"] as? [[String: Any]]
+        #expect(outputFiles?.count == 1)
+        #expect(outputFiles?.first?["format"] as? String == "wav-24bit")
+        #expect(settings["output_format"] == nil)
+        #expect(settings["bitrate"] == nil)
     }
 
     @Test func settingsForJobUses16BitFor16BitSource() {
         let config = makeConfig(channels: 3, bitDepth: 16)
         let settings = config.settingsForJob(config.uploadJobs[0])
-        #expect(settings["output_format"] as? String == "wav-16bit")
+        let outputFiles = settings["output_files"] as? [[String: Any]]
+        #expect(outputFiles?.first?["format"] as? String == "wav-16bit")
     }
 
     @Test func unlinkedSettingsUseTheChannelsOwnOptions() {

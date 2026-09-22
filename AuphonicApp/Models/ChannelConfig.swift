@@ -214,9 +214,7 @@ final class ChannelConfig {
     func settingsForJob(_ job: UploadJob) -> [String: Any] {
         let opts = optionsForJob(job)
         var settings = opts.getSettings()
-        settings["output_format"] = forcedWavFormat
         settings["output_files"] = [["format": forcedWavFormat]]
-        settings.removeValue(forKey: "bitrate")
         return settings
     }
 

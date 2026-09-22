@@ -152,20 +152,17 @@ final class ManualOptionsState {
 
         settings["algorithms"] = algorithms
 
-        // Output format
+        // Output format: only `output_files` is an API field. When the format
+        // is .keep it is omitted so Auphonic keeps the input format.
         if let forced = forcedOutputFormat {
-            settings["output_format"] = forced
             settings["output_files"] = [["format": forced]]
         } else if outputFormat != .keep {
-            settings["output_format"] = outputFormat.rawValue
             var outputFile: [String: Any] = ["format": outputFormat.rawValue]
             if outputFormat.hasBitrate {
-                settings["bitrate"] = "\(bitrate)"
                 outputFile["bitrate"] = "\(bitrate)"
             }
             settings["output_files"] = [outputFile]
         }
-        // When format is .keep, omit output_format/output_files so API keeps input format
 
         return settings
     }

@@ -54,8 +54,8 @@ struct StandardModeConfigTests {
         config.options.bitrate = 192
 
         let settings = config.productionSettings
-        #expect(settings["output_format"] as? String == "mp3")
-        #expect(settings["bitrate"] as? String == "192")
+        #expect(settings["output_format"] == nil)
+        #expect(settings["bitrate"] == nil)
 
         let files = settings["output_files"] as? [[String: Any]]
         #expect(files?.count == 1)
