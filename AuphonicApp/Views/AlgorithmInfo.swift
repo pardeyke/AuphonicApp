@@ -61,6 +61,56 @@ enum AlgorithmInfo {
     of 0.4 s, relative to the normalization target (in LU).
     """
 
+    // MARK: Automatic Cutting
+
+    static let automaticCutting = """
+    Auphonic detects unwanted segments and cuts them out of the production.
+
+    Silence removes silent segments caused by speech breaks, breathing pauses or \
+    equipment handling. Filler Words removes "um", "uh", "mh" and their equivalents in \
+    other languages. Coughs removes coughs, throat-clearing, sneezes and similar \
+    respiratory sounds. Music removes foreground music segments longer than about \
+    20 seconds.
+
+    Cutting changes the length of the file, so it is only available in Standard mode — \
+    in Mix Preparation the processed channel has to line up sample-for-sample with the \
+    original it is written back into.
+    """
+
+    static let cutMode = """
+    Apply Cuts removes the detected segments from the output file.
+
+    Set Cuts to Silence keeps the length of the file and fades the detected segments to \
+    silence instead of removing them.
+
+    Export Uncut Audio leaves the audio untouched and only produces the cut list, which \
+    you can apply yourself in Audacity, Audition, Reaper or via EDL.
+    """
+
+    static let cutFadeTime = """
+    Fade in/out time around each cut, in milliseconds. Short fades keep the timing tight, \
+    longer fades make the transitions less audible on noisy recordings. Auphonic's \
+    default is 100 ms.
+    """
+
+    // MARK: Output File
+
+    static let outputFormat = """
+    The format Auphonic encodes the processed file in. Keep Format returns the same \
+    format as the uploaded file.
+
+    WAV and FLAC are lossless — use them when the file is processed further in an editor \
+    or DAW. MP3, AAC, Opus and OGG Vorbis are lossy and meant for publishing; encoding a \
+    lossy file again always costs quality, so prefer a lossless format if the result is \
+    not the final deliverable.
+    """
+
+    static let outputBitrate = """
+    Bitrate of the lossy encoder in kbit/s. Higher values sound better and produce larger \
+    files. Auphonic's defaults are tuned for speech: 112 kbps MP3, 80 kbps AAC and OGG \
+    Vorbis, 48 kbps Opus. For music or wide-band material pick a higher value.
+    """
+
     // MARK: Loudness Normalization
 
     static let loudness = """

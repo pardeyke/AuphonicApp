@@ -20,6 +20,9 @@ struct FileListView: View {
         Group {
             if viewModel.batchFiles.isEmpty {
                 dropZone
+            } else if viewModel.mode == .standard {
+                // Standard mode processes whole files, so there is nothing to group
+                flatList
             } else {
                 groupedList
             }
@@ -57,21 +60,24 @@ struct FileListView: View {
 
                 Spacer()
 
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        if allCollapsed {
-                            collapsedGroupIDs.removeAll()
-                        } else {
-                            collapsedGroupIDs = Set(viewModel.groups.map(\.id))
+                // Nothing to collapse in Standard mode — the list is flat
+                if viewModel.mode == .mixPreparation {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            if allCollapsed {
+                                collapsedGroupIDs.removeAll()
+                            } else {
+                                collapsedGroupIDs = Set(viewModel.groups.map(\.id))
+                            }
                         }
+                    } label: {
+                        Image(systemName: allCollapsed
+                              ? "rectangle.expand.vertical"
+                              : "rectangle.compress.vertical")
                     }
-                } label: {
-                    Image(systemName: allCollapsed
-                          ? "rectangle.expand.vertical"
-                          : "rectangle.compress.vertical")
+                    .buttonStyle(.borderless)
+                    .help(allCollapsed ? "Expand all groups" : "Collapse all groups")
                 }
-                .buttonStyle(.borderless)
-                .help(allCollapsed ? "Expand all groups" : "Collapse all groups")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
@@ -88,7 +94,9 @@ struct FileListView: View {
             Image(systemName: "arrow.down.doc")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("Drop multichannel WAV files or folders here")
+            Text(viewModel.mode == .mixPreparation
+                 ? "Drop WAV files or folders here"
+                 : "Drop audio files or folders here")
                 .foregroundStyle(.secondary)
                 .font(.caption)
             if viewModel.isLoadingFiles {
@@ -130,6 +138,19 @@ struct FileListView: View {
                                 viewModel.selectFile(first)
                             }
                     }
+                }
+            }
+            .padding(.top, 4)
+        }
+        .scrollContentBackground(.hidden)
+    }
+
+    /// Plain list of takes for Standard mode
+    private var flatList: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(viewModel.batchFiles) { file in
+                    fileRowContainer(file)
                 }
             }
             .padding(.top, 4)
@@ -339,11 +360,13 @@ struct FileListView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
-        panel.message = "Choose WAV files or folders of recordings"
+        panel.message = viewModel.mode == .mixPreparation
+            ? "Choose WAV files or folders of recordings"
+            : "Choose audio files or folders of recordings"
         panel.prompt = "Add"
         // Folders must be listed explicitly, otherwise restricting the types
-        // to WAV lets you browse into folders but never select one.
-        panel.allowedContentTypes = [UTType(filenameExtension: "wav")!, .folder]
+        // to audio lets you browse into folders but never select one.
+        panel.allowedContentTypes = AudioFileTypes.openPanelTypes(for: viewModel.mode)
 
         if panel.runModal() == .OK {
             viewModel.addFiles(panel.urls)

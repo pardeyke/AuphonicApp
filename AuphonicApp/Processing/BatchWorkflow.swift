@@ -42,28 +42,48 @@ final class BatchWorkflow {
 
     // MARK: - Control
 
+    /// Mix Preparation mode: channel surgery per configured group
     func start(groups: [FileGroup], destination: URL, onFinished: (() -> Void)? = nil) {
-        guard !isRunning else { return }
-
         // Only groups with a usable configuration take part
         let work: [(file: BatchFile, config: ChannelConfig)] = groups
             .filter { $0.config.hasValidJobConfiguration }
             .flatMap { group in group.files.map { (file: $0, config: group.config) } }
 
-        guard !work.isEmpty else { return }
+        start(files: work.map(\.file), destination: destination, onFinished: onFinished) { [weak self] index, file in
+            try await self?.processFile(file, config: work[index].config, destination: destination)
+        }
+    }
 
-        for (file, _) in work {
+    /// Standard mode: every file goes to Auphonic as a whole and comes back in the
+    /// configured output format
+    func start(files: [BatchFile], config: StandardModeConfig, destination: URL, onFinished: (() -> Void)? = nil) {
+        guard config.hasValidConfiguration else { return }
+
+        start(files: files, destination: destination, onFinished: onFinished) { [weak self] _, file in
+            try await self?.processFileDirect(file, config: config, destination: destination)
+        }
+    }
+
+    private func start(
+        files: [BatchFile],
+        destination: URL,
+        onFinished: (() -> Void)?,
+        process: @escaping (Int, BatchFile) async throws -> Void
+    ) {
+        guard !isRunning, !files.isEmpty else { return }
+
+        for file in files {
             file.status = .pending
             file.progress = 0
         }
 
         isRunning = true
         completedCount = 0
-        totalCount = work.count
+        totalCount = files.count
         lastOutputDirectory = destination
 
         runTask = Task {
-            await run(work: work, destination: destination)
+            await run(files: files, destination: destination, process: process)
             isRunning = false
             onFinished?()
         }
@@ -76,24 +96,28 @@ final class BatchWorkflow {
 
     // MARK: - Run Loop
 
-    private func run(work: [(file: BatchFile, config: ChannelConfig)], destination: URL) async {
+    private func run(
+        files: [BatchFile],
+        destination: URL,
+        process: (Int, BatchFile) async throws -> Void
+    ) async {
         let accessing = destination.startAccessingSecurityScopedResource()
         defer { if accessing { destination.stopAccessingSecurityScopedResource() } }
 
         var failures = 0
 
-        for (index, item) in work.enumerated() {
+        for (index, file) in files.enumerated() {
             if Task.isCancelled { break }
 
-            statusText = "File \(index + 1) of \(work.count): \(item.file.fileName)"
+            statusText = "File \(index + 1) of \(files.count): \(file.fileName)"
 
             do {
-                try await processFile(item.file, config: item.config, destination: destination)
+                try await process(index, file)
             } catch is CancellationError {
-                item.file.status = .pending
+                file.status = .pending
                 break
             } catch {
-                item.file.status = .failed(error.localizedDescription)
+                file.status = .failed(error.localizedDescription)
                 failures += 1
             }
 
@@ -206,6 +230,93 @@ final class BatchWorkflow {
 
         file.progress = 1
         file.status = .done(outputURL)
+    }
+
+    // MARK: - Per File (Standard mode)
+
+    /// One production per file: the file is uploaded as it is, Auphonic
+    /// processes it and returns it in the configured output format, which is
+    /// saved into the destination folder under the original base name.
+    private func processFileDirect(_ file: BatchFile, config: StandardModeConfig, destination: URL) async throws {
+        file.status = .processing("Preparing…")
+        file.progress = 0
+
+        // The test drive caps the upload; a full run sends the file untouched
+        let source = file.url
+        let needsTrim = maxUploadDuration.map { file.duration > $0 } ?? false
+        var uploadFile = source
+        if needsTrim {
+            let channels = Array(1...file.channelCount)
+            let isFloat = file.isFloat
+            let bitDepth = file.bitDepth
+            let maxDuration = maxUploadDuration
+            uploadFile = try await Task.detached(priority: .userInitiated) {
+                try Self.extractChannels(
+                    from: source,
+                    channels: channels,
+                    isFloat: isFloat,
+                    bitDepth: bitDepth,
+                    maxDuration: maxDuration
+                )
+            }.value
+        }
+        defer {
+            if uploadFile != source {
+                try? FileManager.default.removeItem(at: uploadFile)
+            }
+        }
+
+        try Task.checkCancellation()
+        let title = source.deletingPathExtension().lastPathComponent
+        let uuid = try await apiClient.createProduction(
+            presetUuid: config.presetUuidForProduction,
+            manualSettings: config.productionSettings,
+            title: title
+        )
+
+        file.status = .processing("Uploading…")
+        try await apiClient.uploadFile(productionUuid: uuid, file: uploadFile) { progress in
+            Task { @MainActor in file.progress = 0.3 * progress }
+        }
+        try Task.checkCancellation()
+        try await apiClient.startProduction(productionUuid: uuid)
+
+        file.status = .processing("Processing…")
+        let outputUrl = try await pollUntilDone(productionUuid: uuid, jobLabel: file.fileName, file: file)
+
+        file.status = .processing("Downloading…")
+        let downloaded = try await apiClient.downloadFile(from: outputUrl) { progress in
+            Task { @MainActor in file.progress = 0.8 + 0.15 * progress }
+        }
+        defer { try? FileManager.default.removeItem(at: downloaded) }
+
+        // "Keep format" returns the input format, so fall back to what the
+        // API actually sent before falling back to the source extension
+        file.status = .processing("Writing output…")
+        let ext = config.outputFileExtension
+            ?? (downloaded.pathExtension.isEmpty ? source.pathExtension : downloaded.pathExtension)
+        let outputURL = Self.resolveOutputURL(for: source, destination: destination, preferredExtension: ext)
+        try FileManager.default.copyItem(at: downloaded, to: outputURL)
+
+        if config.writeSettingsJson {
+            writeDirectSidecar(for: outputURL, config: config)
+        }
+
+        if deleteProductionsAfterDownload {
+            try? await apiClient.deleteProduction(uuid: uuid)   // best effort
+        }
+
+        file.progress = 1
+        file.status = .done(outputURL)
+    }
+
+    private func writeDirectSidecar(for outputURL: URL, config: StandardModeConfig) {
+        var payload = config.productionSettings
+        payload["preset"] = config.presetUuidForProduction
+        let sidecarURL = outputURL.deletingPathExtension().appendingPathExtension("json")
+        if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: sidecarURL)
+        }
     }
 
     // MARK: - Per File (Multitrack)
@@ -608,22 +719,30 @@ final class BatchWorkflow {
 
     /// Output path in the destination folder using the original file name.
     /// Never resolves to the original path itself; appends a counter when the
-    /// name is already taken.
-    nonisolated static func resolveOutputURL(for original: URL, destination: URL) -> URL {
+    /// name is already taken. `preferredExtension` is used by Standard mode, where
+    /// the result can come back in a different format than the source.
+    nonisolated static func resolveOutputURL(
+        for original: URL,
+        destination: URL,
+        preferredExtension: String? = nil
+    ) -> URL {
         let baseName = original.deletingPathExtension().lastPathComponent
-        let ext = original.pathExtension
+        let ext = preferredExtension ?? original.pathExtension
 
         func isTaken(_ url: URL) -> Bool {
             url.standardizedFileURL == original.standardizedFileURL
                 || FileManager.default.fileExists(atPath: url.path)
         }
 
-        var candidate = destination.appendingPathComponent(original.lastPathComponent)
+        func url(named name: String) -> URL {
+            let base = destination.appendingPathComponent(name)
+            return ext.isEmpty ? base : base.appendingPathExtension(ext)
+        }
+
+        var candidate = url(named: baseName)
         var counter = 2
         while isTaken(candidate) {
-            candidate = destination
-                .appendingPathComponent("\(baseName)_\(counter)")
-                .appendingPathExtension(ext)
+            candidate = url(named: "\(baseName)_\(counter)")
             counter += 1
         }
         return candidate

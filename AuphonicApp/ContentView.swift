@@ -30,20 +30,55 @@ struct ContentView: View {
             height: MainWindowSize.minHeight
         )
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if viewModel.isProcessing {
+            ToolbarItem(placement: .principal) {
+                TabsSegmentedControl(
+                    values: AppMode.allCases,
+                    titles: AppMode.allCases.map(\.displayName),
+                    selection: $viewModel.mode,
+                    height: 28
+                )
+                .fixedSize()
+                .help(viewModel.mode.summary)
+            }
+
+            // Toolbar items of one logical grouping share a single glass
+            // capsule and read as one control, so every action opts out and
+            // draws its own capsule via its button style
+            if viewModel.isProcessing {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Cancel") {
                         viewModel.cancelProcessing()
                     }
                     .buttonStyle(.glass)
-                } else {
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                // Overflow order as the window shrinks: Test Settings goes
+                // first, then Process Batch; Process stays visible longest
+                ToolbarItem(placement: .primaryAction) {
                     Button("Test Settings") {
                         viewModel.testSettings()
                     }
                     .buttonStyle(.glass)
-                    .disabled(viewModel.selectedGroup == nil)
+                    .disabled(viewModel.mode == .standard ? viewModel.batchFiles.isEmpty : viewModel.selectedGroup == nil)
                     .help("Process the selected take with this group's settings into a temporary file and load it into the player's Processed lane for A/B comparison. Uploads at most the first 3 minutes per upload (Auphonic's billing minimum), so a test never costs more than the minimum.")
+                }
+                .sharedBackgroundVisibility(.hidden)
+                .visibilityPriority(.low)
 
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Process") {
+                        viewModel.processSelectedFile()
+                    }
+                    .buttonStyle(.glass)
+                    .keyboardShortcut(.return, modifiers: [.command, .shift])
+                    .disabled(viewModel.selectedFile == nil)
+                    .help("Run the selected take on its own, with the same settings and output folder as the batch.")
+                }
+                .sharedBackgroundVisibility(.hidden)
+                .visibilityPriority(.high)
+
+                ToolbarItem(placement: .primaryAction) {
                     Button("Process Batch") {
                         viewModel.startProcessing()
                     }
@@ -51,6 +86,8 @@ struct ContentView: View {
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(viewModel.batchFiles.isEmpty)
                 }
+                .sharedBackgroundVisibility(.hidden)
+                .visibilityPriority(.automatic)
             }
         }
         .sheet(isPresented: $viewModel.showingSettings) {
@@ -114,23 +151,7 @@ struct ContentView: View {
                     .padding(.top, 8)
             }
 
-            // Per-group configuration
-            if let group = viewModel.selectedGroup {
-                ChannelConfigView(
-                    config: group.config,
-                    presets: viewModel.presets,
-                    onChange: {
-                        group.config.presetModified = true
-                    },
-                    onSavePreset: { viewModel.showingSavePreset = true }
-                )
-                .id(group.id)
-                .onChange(of: group.config.selectedPresetUuid) { _, newValue in
-                    Task { await viewModel.loadPresetDetails(uuid: newValue) }
-                }
-            } else {
-                emptyState
-            }
+            settingsPane
 
             Spacer(minLength: 4)
 
@@ -154,13 +175,50 @@ struct ContentView: View {
         .frame(minWidth: 560)
     }
 
+    /// Standard mode configures the whole batch at once; Mix Preparation configures
+    /// the selected group
+    @ViewBuilder
+    private var settingsPane: some View {
+        switch viewModel.mode {
+        case .standard:
+            StandardModeView(
+                config: viewModel.standardConfig,
+                presets: viewModel.presets,
+                fileCount: viewModel.batchFiles.count,
+                onChange: { viewModel.standardConfig.presetModified = true },
+                onSavePreset: { viewModel.showingSavePreset = true }
+            )
+            .onChange(of: viewModel.standardConfig.selectedPresetUuid) { _, newValue in
+                Task { await viewModel.loadPresetDetails(uuid: newValue) }
+            }
+
+        case .mixPreparation:
+            if let group = viewModel.selectedGroup {
+                ChannelConfigView(
+                    config: group.config,
+                    presets: viewModel.presets,
+                    onChange: {
+                        group.config.presetModified = true
+                    },
+                    onSavePreset: { viewModel.showingSavePreset = true }
+                )
+                .id(group.id)
+                .onChange(of: group.config.selectedPresetUuid) { _, newValue in
+                    Task { await viewModel.loadPresetDetails(uuid: newValue) }
+                }
+            } else {
+                emptyState
+            }
+        }
+    }
+
     private var emptyState: some View {
         VStack(spacing: 6) {
             Spacer()
             Image(systemName: "waveform.badge.plus")
                 .font(.largeTitle)
                 .foregroundStyle(.tertiary)
-            Text("Add broadcast WAV files to configure channel processing")
+            Text("Add audio files to configure channel processing")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             Text("Files are grouped by timecode order and channel count; each group is configured once.")

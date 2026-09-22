@@ -2,9 +2,14 @@
 
 ## Project Overview
 
-AuphonicApp is a native macOS application (SwiftUI) built for a film-set sound recordist's workflow: batch-process individual channels of multichannel broadcast WAV files (BWF, typically 32-bit float, 2–10 channels) through the Auphonic API and write the processed channels back into untouched copies of the originals.
+AuphonicApp is a native macOS application (SwiftUI) that batch-processes audio through the Auphonic API. It has **two modes** (`AppMode`, persisted in `SettingsManager.appMode`, switched in the toolbar):
 
-Core invariants:
+- **Standard mode** — the general workflow: every file is uploaded as a whole, one production per file, and downloaded again in the chosen output format (`StandardModeConfig` + `StandardModeView`, `BatchWorkflow.processFileDirect`). No channel surgery, no grouping.
+- **Mix Preparation mode** — the film-set workflow it was originally built for: process individual channels of multichannel broadcast WAVs (BWF, typically 32-bit float, 2–10 channels) and write them back into untouched copies of the originals, configured per group.
+
+**Input** (`AudioFileTypes`, mode-dependent): Standard mode takes anything Core Audio can decode (WAV/BWF, AIFF, CAF, MP3, AAC/M4A, ALAC, FLAC …) — `AVAudioFile` decides what really opens. Mix Preparation accepts **WAV only**, because its output is a copy of the original with channels patched into the RIFF data chunk; switching into it drops non-WAV files from the batch.
+
+Core invariants of Mix Preparation mode:
 
 - **Originals are never modified.** Output = byte-for-byte copy of the original with only the processed channels' samples patched in the data chunk (`ChannelReplacer`). Untouched channels and all metadata chunks (bext timecode, iXML track names, etc.) stay bit-perfect; the container keeps its sample format (incl. 32-bit float).
 - **Files are grouped for batch configuration.** Files are sorted by BWF timecode (bext TimeReference) and consecutive runs with the same channel count form a `FileGroup`; API settings are configured once per group.
@@ -34,10 +39,12 @@ open AuphonicApp.xcodeproj
 
 MVVM pattern with a service layer:
 
-- **Models/** — `BatchFile`/`FileGroup`/`FileGrouper` (file metadata + timecode grouping), `ChannelConfig` (per-group channel selection, stereo pairing, packing into `UploadJob`s), `AuphonicModels.swift`, `OutputFormat.swift`
-- **Views/** — SwiftUI views + `AppViewModel` (`@Observable`); `FileListView` (grouped batch list), `ChannelConfigView` (per-group config), `ManualOptionsView` (per-channel Auphonic algorithm settings, holds `ManualOptionsState`)
-- **Services/** — `AuphonicAPIClient` (API-key bearer auth, singletrack + multitrack productions, streamed multipart upload), `ChannelReplacer` (in-place channel patching), `WavChunkCopier` (RIFF chunk read/write, bext timecode, iXML track names/timecode rate), `ZipArchive` (minimal ZIP reader for the tracks archive), `AudioPlayerService`, `SettingsManager`, `NotificationService`
-- **Processing/** — `BatchWorkflow`: per file → extract channels (chunked, format-preserving) → *singletrack*: one production per channel (max 3 concurrent) / *multitrack*: one production with all tracks, unzip the tracks archive and map files back to channels → `ChannelReplacer` writes the output into the chosen destination folder under the original file name
+- **Models/** — `AppMode` (Standard / Mix Preparation), `BatchFile`/`FileGroup`/`FileGrouper` (file metadata + timecode grouping), `ChannelConfig` (per-group channel selection, packing into `UploadJob`s), `StandardModeConfig` (Standard mode settings + output format), `AuphonicModels.swift`, `OutputFormat.swift`
+- **Views/** — SwiftUI views + `AppViewModel` (`@Observable`); `FileListView` (flat list in Standard mode, grouped in Mix Preparation), `StandardModeView` (Standard mode settings + output format), `ChannelConfigView` (per-group config), `ManualOptionsView` (Auphonic algorithm settings, holds `ManualOptionsState`)
+- **Services/** — `AuphonicAPIClient` (API-key bearer auth, singletrack + multitrack productions, streamed multipart upload), `AudioFileTypes` (accepted input formats), `ChannelReplacer` (in-place channel patching), `WavChunkCopier` (RIFF chunk read/write, bext timecode, iXML track names/timecode rate), `ZipArchive` (minimal ZIP reader for the tracks archive), `AudioPlayerService`, `SettingsManager`, `NotificationService`
+- **Processing/** — `BatchWorkflow`, one run loop with two per-file paths:
+  - *Standard mode* (`processFileDirect`): upload the file as it is → poll → download → save under the original base name with the chosen format's extension
+  - *Mix Preparation*: extract channels (chunked, format-preserving) → *singletrack*: one production per channel (max 3 concurrent) / *multitrack*: one production with all tracks, unzip the tracks archive and map files back to channels → `ChannelReplacer` writes the output into the chosen destination folder under the original file name
 
 ## Key Patterns
 

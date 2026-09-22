@@ -11,6 +11,17 @@ final class SettingsManager {
         static let audioOutputDevice = "audioOutputDevice"
         static let perChannelMode = "perChannelMode"
         static let deleteProductionsAfterDownload = "deleteProductionsAfterDownload"
+        static let appMode = "appMode"
+    }
+
+    /// Last used working mode (Standard or Mix Preparation)
+    var appMode: AppMode {
+        get {
+            let stored = defaults.string(forKey: Keys.appMode) ?? ""
+            if stored == "api" { return .standard }    // renamed in 2.0
+            return AppMode(rawValue: stored) ?? .standard
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.appMode) }
     }
 
     var apiToken: String {

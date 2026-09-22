@@ -335,9 +335,9 @@ struct ChannelReplacerTests {
 
 // MARK: - Folder Expansion
 
-struct CollectWavURLsTests {
+struct CollectAudioURLsTests {
 
-    @Test func expandsFoldersRecursivelyAndFiltersNonWav() throws {
+    @Test func expandsFoldersRecursivelyAndFiltersNonAudio() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("auphonic_folder_\(UUID().uuidString)")
         let sub = root.appendingPathComponent("Card1")
@@ -355,15 +355,33 @@ struct CollectWavURLsTests {
         defer { try? FileManager.default.removeItem(at: loose) }
 
         // Folder + loose file + duplicate of a file already inside the folder
-        let collected = AppViewModel.collectWavURLs(from: [root, loose, wavA])
+        let collected = AppViewModel.collectAudioURLs(from: [root, loose, wavA])
 
         #expect(collected.count == 3)
         #expect(Set(collected.map(\.lastPathComponent)) == ["a.WAV", "b.wav", loose.lastPathComponent])
     }
 
+    /// Everything Core Audio can decode is collected, not just WAV
+    @Test func collectsAllAudioFormats() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("auphonic_formats_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let audioNames = ["take.wav", "take.aif", "take.aiff", "take.caf",
+                          "take.mp3", "take.m4a", "take.flac", "take.aac"]
+        let ignoredNames = ["notes.txt", "sheet.pdf", "clip.mov", "art.png"]
+        for name in audioNames + ignoredNames {
+            try Data([1]).write(to: root.appendingPathComponent(name))
+        }
+
+        let collected = AppViewModel.collectAudioURLs(from: [root])
+        #expect(Set(collected.map(\.lastPathComponent)) == Set(audioNames))
+    }
+
     @Test func nonexistentURLsAreIgnored() {
         let ghost = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).wav")
-        #expect(AppViewModel.collectWavURLs(from: [ghost]).isEmpty)
+        #expect(AppViewModel.collectAudioURLs(from: [ghost]).isEmpty)
     }
 }
 
