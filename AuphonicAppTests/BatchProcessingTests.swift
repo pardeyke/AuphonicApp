@@ -744,3 +744,74 @@ struct WaveformCacheTests {
         #expect(cache.waveforms(for: url) == nil)
     }
 }
+
+
+// MARK: - Cost estimate
+
+/// Replaces the old CreditsCalculationTests, which tested a private copy of a
+/// formula the app no longer uses. These drive the real estimate.
+@MainActor
+struct CostEstimateTests {
+
+    private func makeViewModel() -> (AppViewModel, () -> Void) {
+        let suite = "AuphonicAppTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let vm = AppViewModel(settingsManager: SettingsManager(defaults: defaults, tokenStore: InMemoryTokenStore()))
+        return (vm, { defaults.removePersistentDomain(forName: suite) })
+    }
+
+    private func waitUntilLoaded(_ vm: AppViewModel) async {
+        for _ in 0..<200 where vm.isLoadingFiles {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+    }
+
+    /// Standard mode: one production per file, each billed at least 3 minutes
+    @Test func standardModeBillsMinimumPerFile() async throws {
+        let (vm, tearDown) = makeViewModel()
+        defer { tearDown() }
+        vm.mode = .standard
+
+        let a = tempWavURL(), b = tempWavURL()
+        try makeWav(url: a, channels: 1) { _ in 0 }          // 0.1 s
+        try makeWav(url: b, channels: 1, frames: 48_000 * 240) { _ in 0 }   // 4 min
+        defer { for u in [a, b] { try? FileManager.default.removeItem(at: u) } }
+
+        vm.addFiles([a, b])
+        await waitUntilLoaded(vm)
+
+        #expect(vm.estimatedCostSeconds == 0)                 // nothing configured yet
+        #expect(vm.totalApiCallCount == 0)
+
+        vm.standardConfig.options.levelerEnabled = true
+        #expect(vm.totalApiCallCount == 2)
+        #expect(vm.estimatedCostSeconds == 180 + 240)
+    }
+
+    /// Mix Preparation: singletrack bills per channel, multitrack per file
+    @Test func mixPreparationBillsPerChannelOrPerFile() async throws {
+        let (vm, tearDown) = makeViewModel()
+        defer { tearDown() }
+        vm.mode = .mixPreparation
+
+        let take = tempWavURL()
+        try makeWav(url: take, channels: 3) { _ in 0 }
+        defer { try? FileManager.default.removeItem(at: take) }
+
+        vm.addFiles([take])
+        await waitUntilLoaded(vm)
+        let config = try #require(vm.groups.first?.config)
+
+        config.sharedOptions.levelerEnabled = true
+        #expect(vm.totalApiCallCount == 3)
+        #expect(vm.estimatedCostSeconds == 3 * 180)
+
+        config.channels[2].enabled = false
+        #expect(vm.totalApiCallCount == 2)
+        #expect(vm.estimatedCostSeconds == 2 * 180)
+
+        config.productionMode = .multitrack
+        #expect(vm.totalApiCallCount == 1)
+        #expect(vm.estimatedCostSeconds == 180)
+    }
+}

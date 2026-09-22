@@ -12,55 +12,29 @@ struct ManualOptionsStateTests {
         #expect(!opts.noiseEnabled)
         #expect(!opts.filteringEnabled)
         #expect(!opts.loudnessEnabled)
-        #expect(opts.outputFormatEnabled)
         #expect(opts.outputFormat == .keep)
-        #expect(opts.avoidOverwrite)
-        #expect(opts.outputSuffix == "_auphonic")
-        #expect(!opts.keepTimecode)
-        #expect(!opts.previewEnabled)
-        #expect(opts.previewDuration == 60)
+        #expect(opts.bitrate == 112)
+        #expect(!opts.hasAnyAlgorithmEnabled())
     }
 
-    // MARK: - hasAnyEnabled
+    // MARK: - hasAnyAlgorithmEnabled
 
-    @Test func hasAnyEnabledDefault() {
+    @Test func hasAnyAlgorithmEnabledLeveler() {
         let opts = ManualOptionsState()
-        #expect(opts.hasAnyEnabled()) // outputFormatEnabled is true by default
-    }
-
-    @Test func hasAnyEnabledAllDisabled() {
-        let opts = ManualOptionsState()
-        opts.outputFormatEnabled = false
-        #expect(!opts.hasAnyEnabled())
-    }
-
-    @Test func hasAnyEnabledLeveler() {
-        let opts = ManualOptionsState()
-        opts.outputFormatEnabled = false
         opts.levelerEnabled = true
-        #expect(opts.hasAnyEnabled())
+        #expect(opts.hasAnyAlgorithmEnabled())
     }
 
-    @Test func hasAnyEnabledNoise() {
+    @Test func hasAnyAlgorithmEnabledNoise() {
         let opts = ManualOptionsState()
-        opts.outputFormatEnabled = false
         opts.noiseEnabled = true
-        #expect(opts.hasAnyEnabled())
+        #expect(opts.hasAnyAlgorithmEnabled())
     }
 
-    // MARK: - effectivePreviewDuration
-
-    @Test func effectivePreviewDurationWhenDisabled() {
+    @Test func outputFormatAloneIsNotAnAlgorithm() {
         let opts = ManualOptionsState()
-        opts.previewEnabled = false
-        #expect(opts.effectivePreviewDuration == 0)
-    }
-
-    @Test func effectivePreviewDurationWhenEnabled() {
-        let opts = ManualOptionsState()
-        opts.previewEnabled = true
-        opts.previewDuration = 30
-        #expect(opts.effectivePreviewDuration == 30)
+        opts.outputFormat = .mp3
+        #expect(!opts.hasAnyAlgorithmEnabled())
     }
 
     // MARK: - getSettings (Leveler)
@@ -287,76 +261,6 @@ struct ManualOptionsStateTests {
         let outputFiles = settings["output_files"] as? [[String: Any]]
         #expect(outputFiles?.first?["format"] as? String == "mp3")
         #expect(outputFiles?.first?["bitrate"] as? String == "256")
-    }
-
-    @Test func getSettingsForcedFormat() {
-        let opts = ManualOptionsState()
-        opts.forcedOutputFormat = "wav-24bit"
-        opts.outputFormat = .mp3 // Should be ignored
-        let settings = opts.getSettings()
-        let outputFiles = settings["output_files"] as? [[String: Any]]
-        #expect(outputFiles?.first?["format"] as? String == "wav-24bit")
-    }
-
-    // MARK: - Widget State Persistence
-
-    @Test func widgetStateRoundTrip() {
-        let original = ManualOptionsState()
-        original.levelerEnabled = true
-        original.levelerStrength = 80
-        original.compressor = 3
-        original.noiseEnabled = true
-        original.noiseMethod = 2
-        original.noiseAmount = 12
-        original.filteringEnabled = true
-        original.filteringMethod = 2
-        original.loudnessEnabled = true
-        original.loudnessTarget = -23
-        original.maxPeak = -1.5
-        original.dualMono = true
-        original.outputFormat = .mp3
-        original.bitrate = 192
-        original.avoidOverwrite = false
-        original.outputSuffix = "_processed"
-        original.keepTimecode = true
-        original.previewEnabled = true
-        original.previewDuration = 180
-
-        let state = original.getWidgetState()
-
-        let restored = ManualOptionsState()
-        restored.applyWidgetState(state)
-
-        #expect(restored.levelerEnabled == true)
-        #expect(restored.levelerStrength == 80)
-        #expect(restored.compressor == 3)
-        #expect(restored.noiseEnabled == true)
-        #expect(restored.noiseMethod == 2)
-        #expect(restored.noiseAmount == 12)
-        #expect(restored.filteringEnabled == true)
-        #expect(restored.filteringMethod == 2)
-        #expect(restored.loudnessEnabled == true)
-        #expect(restored.loudnessTarget == -23)
-        #expect(restored.maxPeak == -1.5)
-        #expect(restored.dualMono == true)
-        #expect(restored.outputFormat == .mp3)
-        #expect(restored.bitrate == 192)
-        #expect(restored.avoidOverwrite == false)
-        #expect(restored.outputSuffix == "_processed")
-        #expect(restored.keepTimecode == true)
-        #expect(restored.previewEnabled == true)
-        #expect(restored.previewDuration == 180)
-    }
-
-    @Test func applyWidgetStateWithMissingKeys() {
-        let opts = ManualOptionsState()
-        opts.applyWidgetState([:]) // Empty state should use defaults
-        #expect(!opts.levelerEnabled)
-        #expect(opts.levelerStrength == 100)
-        #expect(opts.compressor == 1)
-        #expect(opts.outputFormat == .keep)
-        #expect(opts.avoidOverwrite == true)
-        #expect(opts.breathAmount == -1)
     }
 
     // MARK: - applyApiSettings

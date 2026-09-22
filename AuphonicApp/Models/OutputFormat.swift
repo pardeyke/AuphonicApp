@@ -68,19 +68,4 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .opus: return "opus"
         }
     }
-
-    /// Resolve "keep" format based on input file extension
-    static func resolveKeep(for inputExtension: String) -> (format: String, targetExtension: String?) {
-        switch inputExtension.lowercased() {
-        case "wav": return ("wav-24bit", nil)
-        case "flac": return ("flac", nil)
-        case "mp3": return ("mp3", nil)
-        case "aac", "m4a": return ("aac", nil)
-        case "ogg": return ("vorbis", nil)
-        case "opus": return ("opus", nil)
-        case "alac": return ("alac", nil)
-        case "aif", "aiff": return ("wav-24bit", "aif")
-        default: return ("wav-24bit", nil)
-        }
-    }
 }

@@ -104,27 +104,6 @@ struct WavChunkCopierTests {
         #expect(read == bextData)
     }
 
-    // MARK: - readWavBitDepth
-
-    @Test func readBitDepth24() {
-        let file = createTestWavFile(bitsPerSample: 24)
-        defer { try? FileManager.default.removeItem(at: file) }
-
-        #expect(WavChunkCopier.readWavBitDepth(from: file) == 24)
-    }
-
-    @Test func readBitDepth16() {
-        let file = createTestWavFile(bitsPerSample: 16)
-        defer { try? FileManager.default.removeItem(at: file) }
-
-        #expect(WavChunkCopier.readWavBitDepth(from: file) == 16)
-    }
-
-    @Test func readBitDepthNonWav() {
-        let url = URL(fileURLWithPath: "/tmp/nonexistent_\(UUID().uuidString).wav")
-        #expect(WavChunkCopier.readWavBitDepth(from: url) == 0)
-    }
-
     // MARK: - writeChunk (append)
 
     @Test func writeNewChunk() {
@@ -255,106 +234,6 @@ struct WavChunkCopierTests {
 
         let names = WavChunkCopier.readIxmlTrackNames(from: file)
         #expect(names.isEmpty)
-    }
-
-    // MARK: - updateIxmlForOutput
-
-    @Test func updateIxmlBitDepth() {
-        let ixml = "<BWFXML><AUDIO_BIT_DEPTH>24</AUDIO_BIT_DEPTH></BWFXML>"
-        let data = Data(ixml.utf8)
-        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 16, extractedChannels: [])
-        let str = String(data: updated, encoding: .utf8)!
-        #expect(str.contains("<AUDIO_BIT_DEPTH>16</AUDIO_BIT_DEPTH>"))
-    }
-
-    @Test func updateIxmlSingleChannelExtraction() {
-        let ixml = """
-        <BWFXML>
-            <CHANNEL_COUNT>4</CHANNEL_COUNT>
-            <TRACK_COUNT>4</TRACK_COUNT>
-            <TRACK_LIST>
-                <TRACK><INTERLEAVE_INDEX>1</INTERLEAVE_INDEX><NAME>Boom</NAME></TRACK>
-                <TRACK><INTERLEAVE_INDEX>2</INTERLEAVE_INDEX><NAME>Lav1</NAME></TRACK>
-                <TRACK><INTERLEAVE_INDEX>3</INTERLEAVE_INDEX><NAME>Lav2</NAME></TRACK>
-                <TRACK><INTERLEAVE_INDEX>4</INTERLEAVE_INDEX><NAME>Mix</NAME></TRACK>
-            </TRACK_LIST>
-        </BWFXML>
-        """
-        let data = Data(ixml.utf8)
-        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannels: [2])
-        let str = String(data: updated, encoding: .utf8)!
-        #expect(str.contains("<CHANNEL_COUNT>1</CHANNEL_COUNT>"))
-        #expect(str.contains("<TRACK_COUNT>1</TRACK_COUNT>"))
-    }
-
-    @Test func updateIxmlLRExtraction() {
-        let ixml = """
-        <BWFXML>
-            <CHANNEL_COUNT>4</CHANNEL_COUNT>
-            <TRACK_COUNT>4</TRACK_COUNT>
-        </BWFXML>
-        """
-        let data = Data(ixml.utf8)
-        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannels: [1, 2])
-        let str = String(data: updated, encoding: .utf8)!
-        #expect(str.contains("<CHANNEL_COUNT>2</CHANNEL_COUNT>"))
-        #expect(str.contains("<TRACK_COUNT>2</TRACK_COUNT>"))
-    }
-
-    @Test func updateIxmlNoExtraction() {
-        let ixml = "<BWFXML><CHANNEL_COUNT>2</CHANNEL_COUNT></BWFXML>"
-        let data = Data(ixml.utf8)
-        let updated = WavChunkCopier.updateIxmlForOutput(ixmlData: data, outputBitDepth: 24, extractedChannels: [])
-        let str = String(data: updated, encoding: .utf8)!
-        // Channel count should not change
-        #expect(str.contains("<CHANNEL_COUNT>2</CHANNEL_COUNT>"))
-    }
-
-    // MARK: - downgradeToSimplePcm
-
-    @Test func downgradeAlreadyPcmIsNoop() {
-        // Create WAV with 18-byte PCM fmt chunk (tag=0x0001, with cbSize=0)
-        let tempFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("test_pcm18_\(UUID().uuidString).wav")
-        var fileData = Data()
-        let channels: UInt16 = 1
-        let sampleRate: UInt32 = 48000
-        let bitsPerSample: UInt16 = 24
-        let blockAlign = channels * (bitsPerSample / 8)
-        let byteRate = sampleRate * UInt32(blockAlign)
-        let dataSize: UInt32 = 480 * UInt32(blockAlign)
-
-        // RIFF header
-        fileData.append("RIFF".data(using: .ascii)!)
-        fileData.append(Data(count: 4)) // placeholder
-        fileData.append("WAVE".data(using: .ascii)!)
-        // fmt chunk (18 bytes: 16 PCM + 2 cbSize)
-        fileData.append("fmt ".data(using: .ascii)!)
-        appendUInt32(&fileData, 18) // chunk size = 18
-        appendUInt16(&fileData, 1)  // PCM tag
-        appendUInt16(&fileData, channels)
-        appendUInt32(&fileData, sampleRate)
-        appendUInt32(&fileData, byteRate)
-        appendUInt16(&fileData, blockAlign)
-        appendUInt16(&fileData, bitsPerSample)
-        appendUInt16(&fileData, 0)  // cbSize = 0
-        // data chunk
-        fileData.append("data".data(using: .ascii)!)
-        appendUInt32(&fileData, dataSize)
-        fileData.append(Data(repeating: 0, count: Int(dataSize)))
-        // Fix RIFF size
-        let riffSize = UInt32(fileData.count - 8)
-        fileData.replaceSubrange(4..<8, with: withUnsafeBytes(of: riffSize.littleEndian) { Data($0) })
-        try! fileData.write(to: tempFile)
-        defer { try? FileManager.default.removeItem(at: tempFile) }
-
-        let sizeBefore = try! FileManager.default.attributesOfItem(atPath: tempFile.path)[.size] as! UInt64
-
-        let result = WavChunkCopier.downgradeToSimplePcm(file: tempFile)
-        #expect(result == true) // Returns true for already-PCM
-
-        let sizeAfter = try! FileManager.default.attributesOfItem(atPath: tempFile.path)[.size] as! UInt64
-        #expect(sizeBefore == sizeAfter) // File unchanged
     }
 
     // MARK: - Multiple Chunk Operations

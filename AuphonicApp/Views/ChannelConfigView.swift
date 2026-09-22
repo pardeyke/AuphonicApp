@@ -107,8 +107,8 @@ struct ChannelConfigView: View {
                 GlassCheckbox(
                     label: "Settings JSON",
                     isOn: Binding(
-                        get: { config.writeSettingsXml },
-                        set: { config.writeSettingsXml = $0 }
+                        get: { config.writeSettingsJson },
+                        set: { config.writeSettingsJson = $0 }
                     ),
                     systemImage: "doc.text"
                 )

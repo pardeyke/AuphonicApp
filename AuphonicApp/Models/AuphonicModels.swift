@@ -29,13 +29,6 @@ struct ProductionOutputFile {
     }
 }
 
-/// One input track of a multitrack production
-struct MultitrackTrackSpec {
-    let id: String                      // form field name used for the upload
-    let file: URL
-    let algorithms: [String: Any]
-}
-
 struct ProductionStatus {
     let statusCode: Int
     let statusString: String

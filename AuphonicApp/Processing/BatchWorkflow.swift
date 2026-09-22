@@ -248,7 +248,7 @@ final class BatchWorkflow {
             )
         }.value
 
-        if config.writeSettingsXml {
+        if config.writeSettingsJson {
             writeSettingsSidecar(for: outputURL, jobs: jobs, config: config, bitDepth: file.bitDepth)
         }
 
@@ -503,7 +503,7 @@ final class BatchWorkflow {
             )
         }.value
 
-        if config.writeSettingsXml {
+        if config.writeSettingsJson {
             writeMultitrackSidecar(for: outputURL, config: config, bitDepth: file.bitDepth)
         }
 

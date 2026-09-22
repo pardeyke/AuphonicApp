@@ -54,38 +54,4 @@ final class MultitrackMasterOptions {
 
         return algorithms
     }
-
-    // MARK: - Persistence
-
-    func getWidgetState() -> [String: Any] {
-        [
-            "levelerEnabled": levelerEnabled,
-            "broadcastMode": broadcastMode,
-            "maxLRA": maxLRA,
-            "maxShortTerm": maxShortTerm,
-            "maxMomentary": maxMomentary,
-            "gate": gate,
-            "crossgate": crossgate,
-            "loudnessEnabled": loudnessEnabled,
-            "loudnessTarget": loudnessTarget,
-            "maxPeak": maxPeak,
-            "loudnessMethod": loudnessMethod,
-            "dualMono": dualMono,
-        ]
-    }
-
-    func applyWidgetState(_ state: [String: Any]) {
-        levelerEnabled = (state["levelerEnabled"] as? Bool) ?? true
-        broadcastMode = (state["broadcastMode"] as? Bool) ?? false
-        maxLRA = (state["maxLRA"] as? Int) ?? 0
-        maxShortTerm = (state["maxShortTerm"] as? Int) ?? 0
-        maxMomentary = (state["maxMomentary"] as? Int) ?? 0
-        gate = (state["gate"] as? Bool) ?? true
-        crossgate = (state["crossgate"] as? Bool) ?? true
-        loudnessEnabled = (state["loudnessEnabled"] as? Bool) ?? true
-        loudnessTarget = (state["loudnessTarget"] as? Int) ?? -16
-        maxPeak = (state["maxPeak"] as? Double) ?? 0
-        loudnessMethod = (state["loudnessMethod"] as? Int) ?? 1
-        dualMono = (state["dualMono"] as? Bool) ?? false
-    }
 }

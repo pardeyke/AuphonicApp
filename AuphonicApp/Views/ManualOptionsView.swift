@@ -39,29 +39,8 @@ final class ManualOptionsState {
     var loudnessMethod = 1          // 1=Program, 2=Dialog, 3=RMS
 
     // Output Format
-    var outputFormatEnabled = true
     var outputFormat: OutputFormat = .keep
     var bitrate = 112
-
-    // Output Behavior
-    var avoidOverwrite = true
-    var outputSuffix = "_auphonic"
-    var writeSettingsXml = false
-    var keepTimecode = false
-
-    // Preview
-    var previewEnabled = false
-    var previewDuration: Double = 60    // seconds
-    var fileDuration: Double = 0        // seconds, set from outside
-
-    // Forced output format (set when merge requires WAV)
-    var forcedOutputFormat: String?
-
-    /// Effective preview duration for processing (0 = full)
-    var effectivePreviewDuration: Double {
-        guard previewEnabled else { return 0 }
-        return previewDuration
-    }
 
     /// `filtermethod` values in picker order — same enum for singletrack
     /// productions and for the per-track algorithms of a multitrack production.
@@ -154,9 +133,7 @@ final class ManualOptionsState {
 
         // Output format: only `output_files` is an API field. When the format
         // is .keep it is omitted so Auphonic keeps the input format.
-        if let forced = forcedOutputFormat {
-            settings["output_files"] = [["format": forced]]
-        } else if outputFormat != .keep {
+        if outputFormat != .keep {
             var outputFile: [String: Any] = ["format": outputFormat.rawValue]
             if outputFormat.hasBitrate {
                 outputFile["bitrate"] = "\(bitrate)"
@@ -212,98 +189,10 @@ final class ManualOptionsState {
         return algorithms
     }
 
-    func hasAnyEnabled() -> Bool {
-        levelerEnabled || noiseEnabled || filteringEnabled || loudnessEnabled || outputFormatEnabled
-    }
-
-    /// True when at least one actual processing algorithm is enabled
-    /// (output format alone doesn't count — it's forced to WAV anyway)
+    /// True when at least one processing algorithm is enabled (the output
+    /// format alone doesn't count)
     func hasAnyAlgorithmEnabled() -> Bool {
         levelerEnabled || noiseEnabled || filteringEnabled || loudnessEnabled
-    }
-
-    // MARK: - Widget State Persistence
-
-    func getWidgetState() -> [String: Any] {
-        [
-            "levelerEnabled": levelerEnabled,
-            "levelerStrength": levelerStrength,
-            "compressor": compressor,
-            "separateMS": separateMS,
-            "classifier": classifier,
-            "speechStrength": speechStrength,
-            "speechCompressor": speechCompressor,
-            "musicStrength": musicStrength,
-            "musicCompressor": musicCompressor,
-            "musicGain": musicGain,
-            "broadcastMode": broadcastMode,
-            "maxLRA": maxLRA,
-            "maxShortTerm": maxShortTerm,
-            "maxMomentary": maxMomentary,
-            "noiseEnabled": noiseEnabled,
-            "noiseMethod": noiseMethod,
-            "noiseAmount": noiseAmount,
-            "reverbAmount": reverbAmount,
-            "breathAmount": breathAmount,
-            "dehum": dehum,
-            "dehumAmount": dehumAmount,
-            "filteringEnabled": filteringEnabled,
-            "filteringMethod": filteringMethod,
-            "loudnessEnabled": loudnessEnabled,
-            "loudnessTarget": loudnessTarget,
-            "maxPeak": maxPeak,
-            "dualMono": dualMono,
-            "loudnessMethod": loudnessMethod,
-            "outputFormatEnabled": outputFormatEnabled,
-            "outputFormat": outputFormat.rawValue,
-            "bitrate": bitrate,
-            "avoidOverwrite": avoidOverwrite,
-            "outputSuffix": outputSuffix,
-            "writeSettingsXml": writeSettingsXml,
-            "keepTimecode": keepTimecode,
-            "previewEnabled": previewEnabled,
-            "previewDuration": previewDuration,
-        ]
-    }
-
-    func applyWidgetState(_ state: [String: Any]) {
-        levelerEnabled = (state["levelerEnabled"] as? Bool) ?? false
-        levelerStrength = (state["levelerStrength"] as? Int) ?? 100
-        compressor = (state["compressor"] as? Int) ?? 1
-        separateMS = (state["separateMS"] as? Bool) ?? false
-        classifier = (state["classifier"] as? Int) ?? 1
-        speechStrength = (state["speechStrength"] as? Int) ?? 100
-        speechCompressor = (state["speechCompressor"] as? Int) ?? 1
-        musicStrength = (state["musicStrength"] as? Int) ?? 100
-        musicCompressor = (state["musicCompressor"] as? Int) ?? 0
-        musicGain = (state["musicGain"] as? Int) ?? 0
-        broadcastMode = (state["broadcastMode"] as? Bool) ?? false
-        maxLRA = (state["maxLRA"] as? Int) ?? 0
-        maxShortTerm = (state["maxShortTerm"] as? Int) ?? 0
-        maxMomentary = (state["maxMomentary"] as? Int) ?? 0
-        noiseEnabled = (state["noiseEnabled"] as? Bool) ?? false
-        noiseMethod = (state["noiseMethod"] as? Int) ?? 1
-        noiseAmount = (state["noiseAmount"] as? Int) ?? 0
-        reverbAmount = (state["reverbAmount"] as? Int) ?? 0
-        breathAmount = (state["breathAmount"] as? Int) ?? -1
-        dehum = (state["dehum"] as? Int) ?? 0
-        dehumAmount = (state["dehumAmount"] as? Int) ?? 0
-        filteringEnabled = (state["filteringEnabled"] as? Bool) ?? false
-        filteringMethod = (state["filteringMethod"] as? Int) ?? 1
-        loudnessEnabled = (state["loudnessEnabled"] as? Bool) ?? false
-        loudnessTarget = (state["loudnessTarget"] as? Int) ?? -16
-        maxPeak = (state["maxPeak"] as? Double) ?? 0
-        dualMono = (state["dualMono"] as? Bool) ?? false
-        loudnessMethod = (state["loudnessMethod"] as? Int) ?? 1
-        outputFormatEnabled = (state["outputFormatEnabled"] as? Bool) ?? true
-        if let fmt = state["outputFormat"] as? String { outputFormat = OutputFormat(rawValue: fmt) ?? .keep }
-        bitrate = (state["bitrate"] as? Int) ?? 112
-        avoidOverwrite = (state["avoidOverwrite"] as? Bool) ?? true
-        outputSuffix = (state["outputSuffix"] as? String) ?? "_auphonic"
-        writeSettingsXml = (state["writeSettingsXml"] as? Bool) ?? false
-        keepTimecode = (state["keepTimecode"] as? Bool) ?? false
-        previewEnabled = (state["previewEnabled"] as? Bool) ?? false
-        previewDuration = (state["previewDuration"] as? Double) ?? 60
     }
 
     func applyApiSettings(_ algorithms: [String: Any]) {

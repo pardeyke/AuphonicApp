@@ -80,7 +80,7 @@ final class ChannelConfig {
     var presetModified: Bool = false
 
     // Write the used settings as a JSON sidecar next to each output file
-    var writeSettingsXml: Bool = false
+    var writeSettingsJson: Bool = false
 
     // MARK: - Configuration
 

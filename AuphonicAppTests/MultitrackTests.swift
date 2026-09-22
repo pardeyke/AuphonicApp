@@ -146,24 +146,6 @@ struct MultitrackMasterOptionsTests {
         #expect(settings["normloudness"] as? Bool == false)
         #expect(settings["loudnesstarget"] == nil)
     }
-
-    @Test func widgetStateRoundTrip() {
-        let original = MultitrackMasterOptions()
-        original.levelerEnabled = false
-        original.crossgate = false
-        original.loudnessTarget = -23
-        original.maxPeak = -2
-        original.loudnessMethod = 2
-
-        let restored = MultitrackMasterOptions()
-        restored.applyWidgetState(original.getWidgetState())
-
-        #expect(restored.levelerEnabled == false)
-        #expect(restored.crossgate == false)
-        #expect(restored.loudnessTarget == -23)
-        #expect(restored.maxPeak == -2)
-        #expect(restored.loudnessMethod == 2)
-    }
 }
 
 // MARK: - Track Matching
