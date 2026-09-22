@@ -101,9 +101,11 @@ nonisolated enum WavChunkCopier {
 
                 handle.write(remainingData)
 
-                // Update RIFF size
-                let sizeDiff = Int64(chunkData.count) - Int64(existingSize)
-                riffSize = UInt32(Int64(riffSize) + sizeDiff)
+                // Update RIFF size: compare the padded sizes, since an odd
+                // chunk carries a pad byte that counts towards the RIFF size
+                let oldPadded = Int64(oldChunkTotalSize)
+                let newPadded = Int64(8 + chunkData.count + (chunkData.count % 2 != 0 ? 1 : 0))
+                riffSize = UInt32(Int64(riffSize) + newPadded - oldPadded)
                 handle.seek(toFileOffset: 4)
                 var sizeLE = riffSize.littleEndian
                 handle.write(Data(bytes: &sizeLE, count: 4))

@@ -353,6 +353,42 @@ struct WavChunkCopierTests {
         #expect(WavChunkCopier.readChunk(from: file, chunkId: "bext") == bextData)
     }
 
+    /// The RIFF size field must always equal the file size minus 8, also when
+    /// a replacement changes the chunk's padding parity (odd → even and back).
+    private func riffSizeMatchesFile(_ file: URL) -> Bool {
+        guard let data = try? Data(contentsOf: file), data.count >= 8 else { return false }
+        let riffSize = data[4..<8].withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
+        return Int(UInt32(littleEndian: riffSize)) == data.count - 8
+    }
+
+    @Test func riffSizeStaysConsistentAcrossParityChanges() {
+        let file = createTestWavFile(extraChunks: [("bext", Data("odd size chunk".utf8))])  // 14 bytes
+        defer { try? FileManager.default.removeItem(at: file) }
+        #expect(riffSizeMatchesFile(file))
+
+        // even → odd (used to leave the RIFF size one byte short)
+        #expect(WavChunkCopier.writeChunk(to: file, chunkId: "bext", data: Data("thirteen chars".utf8).dropLast()))
+        #expect(riffSizeMatchesFile(file))
+
+        // odd → even (used to leave it one byte too large)
+        #expect(WavChunkCopier.writeChunk(to: file, chunkId: "bext", data: Data("replaced bext data here!".utf8)))
+        #expect(riffSizeMatchesFile(file))
+
+        // odd → odd
+        #expect(WavChunkCopier.writeChunk(to: file, chunkId: "bext", data: Data("a".utf8)))
+        #expect(WavChunkCopier.writeChunk(to: file, chunkId: "bext", data: Data("abc".utf8)))
+        #expect(riffSizeMatchesFile(file))
+
+        // append and remove keep it consistent too
+        #expect(WavChunkCopier.writeChunk(to: file, chunkId: "iXML", data: Data("xyz".utf8)))
+        #expect(riffSizeMatchesFile(file))
+        #expect(WavChunkCopier.removeChunk(from: file, chunkId: "bext"))
+        #expect(riffSizeMatchesFile(file))
+
+        #expect(WavChunkCopier.readChunk(from: file, chunkId: "iXML") == Data("xyz".utf8))
+        #expect(WavChunkCopier.readChunk(from: file, chunkId: "fmt ") != nil)
+    }
+
     @Test func writeOddSizedChunk() {
         let file = createTestWavFile()
         defer { try? FileManager.default.removeItem(at: file) }
