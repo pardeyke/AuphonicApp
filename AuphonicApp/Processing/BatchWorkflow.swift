@@ -476,18 +476,41 @@ final class BatchWorkflow {
 
     /// Match the files inside Auphonic's tracks archive to the uploaded track
     /// ids: by id first, then by the "Track N" numbering, then by name order.
+    ///
+    /// The id passes go from strict to loose across *all* ids before relaxing,
+    /// so `ch10.wav` is claimed by `ch10` exactly before `ch1` gets a chance
+    /// to substring-match it; the loose pass also tries longer ids first.
     nonisolated static func matchTracks(_ files: [URL], to trackIds: [String]) -> [URL] {
         var remaining = files
         var result: [URL?] = Array(repeating: nil, count: trackIds.count)
 
-        // 1. Exact/contained track id in the file name
+        func baseName(_ url: URL) -> String {
+            url.deletingPathExtension().lastPathComponent.lowercased()
+        }
+
+        func claim(_ index: Int, where predicate: (String) -> Bool) {
+            guard result[index] == nil,
+                  let match = remaining.firstIndex(where: { predicate(baseName($0)) }) else { return }
+            result[index] = remaining.remove(at: match)
+        }
+
+        // 1a. File is named exactly after the track id
         for (index, trackId) in trackIds.enumerated() {
             let needle = trackId.lowercased()
-            if let match = remaining.firstIndex(where: {
-                $0.deletingPathExtension().lastPathComponent.lowercased().contains(needle)
-            }) {
-                result[index] = remaining.remove(at: match)
-            }
+            claim(index) { $0 == needle }
+        }
+
+        // 1b. Track id appears as a whole token ("take_ch1_processed", not "ch10")
+        for (index, trackId) in trackIds.enumerated() {
+            let pattern = "(^|[^a-z0-9])" + NSRegularExpression.escapedPattern(for: trackId.lowercased()) + "([^a-z0-9]|$)"
+            claim(index) { $0.range(of: pattern, options: .regularExpression) != nil }
+        }
+
+        // 1c. Track id contained anywhere, longest ids first so "lav10" wins over "lav1"
+        let byLength = trackIds.enumerated().sorted { $0.element.count > $1.element.count }
+        for (index, trackId) in byLength {
+            let needle = trackId.lowercased()
+            claim(index) { $0.contains(needle) }
         }
 
         // 2. "Track N" numbering (1-based, in upload order)

@@ -189,6 +189,34 @@ struct TrackMatchingTests {
         #expect(matched.map(\.lastPathComponent) == ["Track 1.wav", "Track 2.wav", "Track 3.wav"])
     }
 
+    /// Unnamed channels get ids ch1 … ch10; "ch1" must not grab "ch10.wav"
+    /// just because the archive lists it first.
+    @Test func exactIdWinsOverSubstringForTenOrMoreChannels() {
+        let ids = (1...10).map { "ch\($0)" }
+        let files = urls(["ch10.wav", "ch9.wav", "ch8.wav", "ch7.wav", "ch6.wav",
+                          "ch5.wav", "ch4.wav", "ch3.wav", "ch2.wav", "ch1.wav"])
+        let matched = BatchWorkflow.matchTracks(files, to: ids)
+
+        #expect(matched.map(\.lastPathComponent) == ids.map { "\($0).wav" })
+    }
+
+    /// Same collision with iXML names such as LAV1 / LAV10, and with the
+    /// exported names carrying a prefix and suffix around the id.
+    @Test func wholeTokenMatchBeatsSubstringMatch() {
+        let files = urls(["take_LAV10_processed.wav", "take_LAV1_processed.wav", "take_BOOM_processed.wav"])
+        let matched = BatchWorkflow.matchTracks(files, to: ["BOOM", "LAV1", "LAV10"])
+
+        #expect(matched.map(\.lastPathComponent) == ["take_BOOM_processed.wav", "take_LAV1_processed.wav", "take_LAV10_processed.wav"])
+    }
+
+    /// Ids glued to other text still match, and the longer id is tried first
+    @Test func substringFallbackPrefersLongerIds() {
+        let files = urls(["mixlav10x.wav", "mixlav1x.wav"])
+        let matched = BatchWorkflow.matchTracks(files, to: ["lav1", "lav10"])
+
+        #expect(matched.map(\.lastPathComponent) == ["mixlav1x.wav", "mixlav10x.wav"])
+    }
+
     @Test func fallsBackToNameOrder() {
         let files = urls(["b.wav", "a.wav"])
         let matched = BatchWorkflow.matchTracks(files, to: ["first", "second"])
