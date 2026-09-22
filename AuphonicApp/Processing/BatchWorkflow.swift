@@ -249,7 +249,11 @@ final class BatchWorkflow {
         }.value
 
         if config.writeSettingsJson {
-            writeSettingsSidecar(for: outputURL, jobs: jobs, config: config, bitDepth: file.bitDepth)
+            var perJob: [String: Any] = [:]
+            for job in jobs {
+                perJob[job.label] = config.settingsForJob(job, bitDepth: file.bitDepth)
+            }
+            writeSidecar(perJob, next: outputURL)
         }
 
         // Housekeeping: the output is safely on disk, remove the productions
@@ -313,7 +317,7 @@ final class BatchWorkflow {
         try await apiClient.startProduction(productionUuid: uuid)
 
         file.status = .processing("Processing…")
-        let outputUrl = try await pollUntilDone(productionUuid: uuid, jobLabel: file.fileName, file: file)
+        let outputUrl = try await pollForOutputURL(productionUuid: uuid, label: file.fileName)
 
         file.status = .processing("Downloading…")
         let downloaded = try await apiClient.downloadFile(from: outputUrl) { progress in
@@ -330,7 +334,9 @@ final class BatchWorkflow {
         try FileManager.default.copyItem(at: downloaded, to: outputURL)
 
         if config.writeSettingsJson {
-            writeDirectSidecar(for: outputURL, config: config)
+            var payload = config.productionSettings
+            payload["preset"] = config.presetUuidForProduction
+            writeSidecar(payload, next: outputURL)
         }
 
         if deleteProductionsAfterDownload {
@@ -339,15 +345,6 @@ final class BatchWorkflow {
 
         file.progress = 1
         file.status = .done(outputURL)
-    }
-
-    private func writeDirectSidecar(for outputURL: URL, config: StandardModeConfig) {
-        var payload = config.productionSettings
-        payload["preset"] = config.presetUuidForProduction
-        let sidecarURL = outputURL.deletingPathExtension().appendingPathExtension("json")
-        if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: sidecarURL)
-        }
     }
 
     // MARK: - Per File (Multitrack)
@@ -434,8 +431,8 @@ final class BatchWorkflow {
         // 3. Upload all tracks in one request, then start
         file.status = .processing("Uploading \(uploads.count) tracks…")
         try await apiClient.uploadFiles(productionUuid: productionUuid, files: uploads) { [weak self] fraction in
-            Task { @MainActor in
-                guard let self, self.isRunning else { return }
+            Task { @MainActor [weak self] in
+                guard self?.isRunning == true else { return }
                 file.progress = 0.1 + fraction * 0.35
             }
         }
@@ -444,7 +441,9 @@ final class BatchWorkflow {
 
         // 4. Poll
         file.status = .processing("Processing multitrack production…")
-        let status = try await pollUntilDoneMultitrack(productionUuid: productionUuid, file: file)
+        let status = try await pollUntilDone(productionUuid: productionUuid, label: "multitrack production") { progress in
+            file.progress = 0.45 + progress * 0.4
+        }
 
         // 5. Download the tracks archive (and the mixdown when requested)
         guard let tracksFile = status.outputFiles.first(where: \.isTracksArchive) else {
@@ -504,7 +503,12 @@ final class BatchWorkflow {
         }.value
 
         if config.writeSettingsJson {
-            writeMultitrackSidecar(for: outputURL, config: config, bitDepth: file.bitDepth)
+            writeSidecar([
+                "mode": "multitrack",
+                "master": config.masterOptions.getSettings(),
+                "tracks": config.multitrackTrackAlgorithms,
+                "output_files": config.multitrackOutputFiles(bitDepth: file.bitDepth)
+            ], next: outputURL)
         }
 
         if deleteProductionsAfterDownload {
@@ -576,45 +580,6 @@ final class BatchWorkflow {
         return result.compactMap { $0 }
     }
 
-    private func pollUntilDoneMultitrack(productionUuid: String, file: BatchFile) async throws -> ProductionStatus {
-        let deadline = Date().addingTimeInterval(Self.pollTimeout)
-        var failures = PollFailures()
-
-        while Date() < deadline {
-            try await Task.sleep(for: Self.pollInterval)
-
-            let status: ProductionStatus
-            do {
-                status = try await apiClient.getProductionStatus(productionUuid: productionUuid)
-                failures.reset()
-            } catch {
-                try failures.record(error)   // transient: keep polling
-                continue
-            }
-
-            file.progress = 0.45 + min(1, max(0, status.progress)) * 0.4
-
-            if status.isDone { return status }
-            if status.isError {
-                throw AuphonicAPIClient.APIError.httpError(0, status.failureDescription)
-            }
-        }
-        throw AuphonicAPIClient.APIError.networkError("Timed out waiting for multitrack production")
-    }
-
-    private func writeMultitrackSidecar(for outputURL: URL, config: ChannelConfig, bitDepth: Int) {
-        let payload: [String: Any] = [
-            "mode": "multitrack",
-            "master": config.masterOptions.getSettings(),
-            "tracks": config.multitrackTrackAlgorithms,
-            "output_files": config.multitrackOutputFiles(bitDepth: bitDepth)
-        ]
-        let sidecarURL = outputURL.deletingPathExtension().appendingPathExtension("json")
-        if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: sidecarURL)
-        }
-    }
-
     // MARK: - Per Upload Job
 
     private func processJob(
@@ -665,7 +630,7 @@ final class BatchWorkflow {
 
             // 4. Poll until done
             file.status = .processing("Processing \(job.label)…")
-            let outputUrl = try await pollUntilDone(productionUuid: uuid, jobLabel: job.label, file: file)
+            let outputUrl = try await pollForOutputURL(productionUuid: uuid, label: job.label)
 
             // 5. Download
             file.status = .processing("Downloading \(job.label)…")
@@ -680,7 +645,16 @@ final class BatchWorkflow {
         }
     }
 
-    private func pollUntilDone(productionUuid: String, jobLabel: String, file: BatchFile) async throws -> String {
+    // MARK: - Polling
+
+    /// Polls a production every `pollInterval` until it is done, and returns
+    /// its final status. `label` names the production in error messages;
+    /// `onProgress` receives Auphonic's 0…1 progress after each poll.
+    private func pollUntilDone(
+        productionUuid: String,
+        label: String,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> ProductionStatus {
         let deadline = Date().addingTimeInterval(Self.pollTimeout)
         var failures = PollFailures()
 
@@ -696,17 +670,24 @@ final class BatchWorkflow {
                 continue
             }
 
-            if status.isDone {
-                guard !status.outputFileUrl.isEmpty else {
-                    throw AuphonicAPIClient.APIError.decodingError("No output file URL for \(jobLabel)")
-                }
-                return status.outputFileUrl
-            }
+            onProgress?(min(1, max(0, status.progress)))
+
+            if status.isDone { return status }
             if status.isError {
-                throw AuphonicAPIClient.APIError.httpError(0, "\(jobLabel): \(status.failureDescription)")
+                throw AuphonicAPIClient.APIError.httpError(0, "\(label): \(status.failureDescription)")
             }
         }
-        throw AuphonicAPIClient.APIError.networkError("Timed out waiting for \(jobLabel)")
+        throw AuphonicAPIClient.APIError.networkError("Timed out waiting for \(label)")
+    }
+
+    /// Singletrack productions deliver one output file; its URL is what the
+    /// download step needs.
+    private func pollForOutputURL(productionUuid: String, label: String) async throws -> String {
+        let status = try await pollUntilDone(productionUuid: productionUuid, label: label)
+        guard !status.outputFileUrl.isEmpty else {
+            throw AuphonicAPIClient.APIError.decodingError("No output file URL for \(label)")
+        }
+        return status.outputFileUrl
     }
 
     // MARK: - Channel Extraction
@@ -818,13 +799,12 @@ final class BatchWorkflow {
 
     // MARK: - Settings Sidecar
 
-    private func writeSettingsSidecar(for outputURL: URL, jobs: [UploadJob], config: ChannelConfig, bitDepth: Int) {
-        var perJob: [String: Any] = [:]
-        for job in jobs {
-            perJob[job.label] = config.settingsForJob(job, bitDepth: bitDepth)
-        }
+    /// Writes the settings that produced `outputURL` next to it as
+    /// `<name>.json`. Best effort: a sidecar that cannot be written must not
+    /// fail a file whose audio is already on disk.
+    private func writeSidecar(_ payload: [String: Any], next outputURL: URL) {
         let sidecarURL = outputURL.deletingPathExtension().appendingPathExtension("json")
-        if let data = try? JSONSerialization.data(withJSONObject: perJob, options: [.prettyPrinted, .sortedKeys]) {
+        if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: sidecarURL)
         }
     }
