@@ -1,1 +1,9 @@
+# Build products
 /build
+DerivedData/
+
+# Per-user Xcode state (window layout, scheme visibility, breakpoints)
+xcuserdata/
+
+# Finder
+.DS_Store
