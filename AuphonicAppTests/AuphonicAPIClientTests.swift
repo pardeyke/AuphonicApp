@@ -146,4 +146,79 @@ struct AuphonicAPIClientTests {
         client.token = "my-secret-token"
         #expect(client.token == "my-secret-token")
     }
+
+    // MARK: - Production Request Body
+
+    /// Standard mode "Keep Format" must not send `output_files`; the client
+    /// used to inject wav-24bit here, which turned every MP3 into a WAV.
+    @Test func keepFormatSendsNoOutputFiles() {
+        let config = StandardModeConfig()
+        config.options.levelerEnabled = true
+
+        let body = AuphonicAPIClient.productionRequestBody(
+            presetUuid: "",
+            manualSettings: config.productionSettings,
+            title: "interview"
+        )
+
+        #expect(body["output_files"] == nil)
+        #expect(body["output_format"] == nil)
+        #expect(body["preset"] == nil)
+        #expect(body["title"] as? String == "interview")
+        #expect(body["output_basename"] as? String == "interview")
+        #expect((body["algorithms"] as? [String: Any])?["leveler"] as? Bool == true)
+    }
+
+    /// A preset with "Keep Format" keeps the preset's own output files
+    @Test func presetWithKeepFormatSendsOnlyPreset() {
+        let config = StandardModeConfig()
+        config.selectedPresetUuid = "preset-123"
+
+        let body = AuphonicAPIClient.productionRequestBody(
+            presetUuid: config.presetUuidForProduction,
+            manualSettings: config.productionSettings,
+            title: "take"
+        )
+
+        #expect(body["preset"] as? String == "preset-123")
+        #expect(body["output_files"] == nil)
+    }
+
+    @Test func explicitFormatSendsOutputFilesWithBitrate() {
+        let config = StandardModeConfig()
+        config.options.outputFormat = .mp3
+        config.options.bitrate = 128
+
+        let body = AuphonicAPIClient.productionRequestBody(
+            presetUuid: "",
+            manualSettings: config.productionSettings,
+            title: "take"
+        )
+
+        let files = body["output_files"] as? [[String: Any]]
+        #expect(files?.count == 1)
+        #expect(files?.first?["format"] as? String == "mp3")
+        #expect(files?.first?["bitrate"] as? String == "128")
+    }
+
+    /// Mix Preparation always forces WAV so the channel can be written back
+    @Test func mixPreparationJobAlwaysSendsForcedWav() {
+        let config = ChannelConfig()
+        config.configure(count: 2, trackNames: ["BOOM", "LAV"], bitDepth: 32)
+        config.channels[0].enabled = true
+        config.channels[1].enabled = false
+        config.sharedOptions.noiseEnabled = true
+
+        let job = try! #require(config.uploadJobs.first)
+        let body = AuphonicAPIClient.productionRequestBody(
+            presetUuid: config.presetUuidForJob(job),
+            manualSettings: config.settingsForJob(job),
+            title: "take_ch1"
+        )
+
+        let files = body["output_files"] as? [[String: Any]]
+        #expect(files?.count == 1)
+        #expect(files?.first?["format"] as? String == "wav-24bit")
+        #expect(body["bitrate"] == nil)
+    }
 }

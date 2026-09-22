@@ -73,7 +73,12 @@ final class AuphonicAPIClient {
 
     // MARK: - Productions
 
-    func createProduction(presetUuid: String, manualSettings: [String: Any], title: String) async throws -> String {
+    /// Request body of a singletrack production. `output_files` is only sent
+    /// when the caller asks for a format: Mix Preparation always forces WAV via
+    /// `ChannelConfig.settingsForJob`, and Standard mode omits it for "Keep
+    /// Format" so Auphonic mirrors the input format (or applies the preset's
+    /// own output files) instead of defaulting to WAV.
+    nonisolated static func productionRequestBody(presetUuid: String, manualSettings: [String: Any], title: String) -> [String: Any] {
         var body: [String: Any] = [
             "title": title,
             "output_basename": title
@@ -88,16 +93,11 @@ final class AuphonicAPIClient {
             body[key] = value
         }
 
-        // Ensure output_files is set
-        if body["output_files"] == nil {
-            let format = (manualSettings["output_format"] as? String) ?? "wav-24bit"
-            var outputFile: [String: Any] = ["format": format]
-            if let bitrate = manualSettings["bitrate"] as? String {
-                outputFile["bitrate"] = bitrate
-            }
-            body["output_files"] = [outputFile]
-        }
+        return body
+    }
 
+    func createProduction(presetUuid: String, manualSettings: [String: Any], title: String) async throws -> String {
+        let body = Self.productionRequestBody(presetUuid: presetUuid, manualSettings: manualSettings, title: title)
         let json = try await post("/productions.json", body: body)
         guard let data = json["data"] as? [String: Any],
               let uuid = data["uuid"] as? String else {
