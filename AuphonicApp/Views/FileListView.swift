@@ -1,6 +1,5 @@
 import SwiftUI
 import AVFoundation
-import UniformTypeIdentifiers
 
 /// Batch file list, organized into timecode-adjacent groups of equal channel
 /// count. Selecting a row selects its group for configuration.
@@ -44,9 +43,14 @@ struct FileListView: View {
                 .padding(2)
                 .opacity(isDropTargeted ? 1 : 0)
         )
-        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
-            handleDrop(providers)
+        // All dropped URLs arrive in one call, so a folder plus files becomes
+        // a single batch update instead of one per item
+        .dropDestination(for: URL.self) { urls, _ in
+            guard isEnabled else { return false }
+            viewModel.addFiles(urls)
             return true
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
         }
         .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
     }
@@ -373,21 +377,6 @@ struct FileListView: View {
 
         if panel.runModal() == .OK {
             viewModel.addFiles(panel.urls)
-        }
-    }
-
-    // MARK: - Drag & Drop
-
-    private func handleDrop(_ providers: [NSItemProvider]) {
-        guard isEnabled else { return }
-        for provider in providers {
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                guard let data = item as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                DispatchQueue.main.async {
-                    viewModel.addFiles([url])
-                }
-            }
         }
     }
 }

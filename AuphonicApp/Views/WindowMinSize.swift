@@ -51,6 +51,26 @@ extension View {
     func enforcedWindowMinSize(width: CGFloat, height: CGFloat) -> some View {
         background(WindowMinSizeApplier(contentMinSize: CGSize(width: width, height: height)))
     }
+
+    /// Drops the key focus SwiftUI hands to the first focusable control when
+    /// the window opens, so the app does not start with a focus ring on a
+    /// sidebar button or a settings chip. Tab still reaches every control.
+    func clearingInitialFocus() -> some View {
+        background(InitialFocusClearer())
+    }
+}
+
+private struct InitialFocusClearer: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        view.isHidden = true
+        DispatchQueue.main.async {
+            view.window?.makeFirstResponder(nil)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 private struct WindowMinSizeApplier: NSViewRepresentable {

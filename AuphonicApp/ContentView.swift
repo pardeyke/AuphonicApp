@@ -3,7 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @Bindable var viewModel: AppViewModel
     @State private var sidebarWidth: CGFloat = MainWindowSize.sidebarIdealWidth
-    @FocusState private var focused: Bool
+    @State private var spaceBarMonitor: Any?
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -109,13 +109,13 @@ struct ContentView: View {
         } message: {
             Text(viewModel.alertMessage)
         }
-        .focused($focused)
+        .clearingInitialFocus()
         .task {
-            focused = false
             await viewModel.connectAndFetch()
         }
         .onAppear {
-            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard spaceBarMonitor == nil else { return }
+            spaceBarMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 // Space bar, not in a text field
                 if event.keyCode == 49,
                    !(NSApp.keyWindow?.firstResponder is NSTextView) {
@@ -125,6 +125,12 @@ struct ContentView: View {
                     }
                 }
                 return event
+            }
+        }
+        .onDisappear {
+            if let spaceBarMonitor {
+                NSEvent.removeMonitor(spaceBarMonitor)
+                self.spaceBarMonitor = nil
             }
         }
     }
