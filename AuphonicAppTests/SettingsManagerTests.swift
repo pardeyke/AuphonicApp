@@ -2,85 +2,117 @@ import Testing
 import Foundation
 @testable import AuphonicApp
 
+/// Every test gets its own UserDefaults suite, removed again afterwards. The
+/// test host is the sandboxed app itself, so writing to `.standard` here
+/// would overwrite the user's real settings — an earlier version of these
+/// tests wiped the API token that way.
 struct SettingsManagerTests {
 
-    /// Use a fresh UserDefaults suite per test to avoid cross-contamination
-    private func makeManager(suiteName: String = UUID().uuidString) -> (SettingsManager, UserDefaults) {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        // SettingsManager uses UserDefaults.standard directly,
-        // so we test its behavior through the public API
-        let manager = SettingsManager()
-        return (manager, defaults)
+    private struct Sandbox {
+        let manager: SettingsManager
+        let defaults: UserDefaults
+        let suiteName: String
+
+        init() {
+            suiteName = "AuphonicAppTests.\(UUID().uuidString)"
+            defaults = UserDefaults(suiteName: suiteName)!
+            manager = SettingsManager(defaults: defaults)
+        }
+
+        func tearDown() {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
     }
 
-    // Note: These tests interact with UserDefaults.standard.
-    // They clean up after themselves but are best run in isolation.
-
     @Test func apiTokenPersistence() {
-        let manager = SettingsManager()
-        let token = "test-token-\(UUID().uuidString)"
-        manager.apiToken = token
-        #expect(manager.apiToken == token)
-        #expect(manager.hasApiToken)
+        let box = Sandbox()
+        defer { box.tearDown() }
 
-        // Cleanup
-        manager.apiToken = ""
+        #expect(!box.manager.hasApiToken)
+        let token = "test-token-\(UUID().uuidString)"
+        box.manager.apiToken = token
+        #expect(box.manager.apiToken == token)
+        #expect(box.manager.hasApiToken)
+        #expect(box.defaults.string(forKey: "apiToken") == token)
     }
 
     @Test func hasApiTokenEmptyString() {
-        let manager = SettingsManager()
-        let original = manager.apiToken
-        manager.apiToken = ""
-        #expect(!manager.hasApiToken)
-        manager.apiToken = original
+        let box = Sandbox()
+        defer { box.tearDown() }
+
+        box.manager.apiToken = "x"
+        box.manager.apiToken = ""
+        #expect(!box.manager.hasApiToken)
     }
 
     @Test func lastPresetUuidPersistence() {
-        let manager = SettingsManager()
+        let box = Sandbox()
+        defer { box.tearDown() }
+
         let uuid = "preset-\(UUID().uuidString)"
-        manager.lastPresetUuid = uuid
-        #expect(manager.lastPresetUuid == uuid)
-        manager.lastPresetUuid = ""
+        box.manager.lastPresetUuid = uuid
+        #expect(box.manager.lastPresetUuid == uuid)
     }
 
     @Test func perChannelModePersistence() {
-        let manager = SettingsManager()
-        let original = manager.perChannelMode
-        manager.perChannelMode = true
-        #expect(manager.perChannelMode == true)
-        manager.perChannelMode = false
-        #expect(manager.perChannelMode == false)
-        manager.perChannelMode = original
+        let box = Sandbox()
+        defer { box.tearDown() }
+
+        #expect(box.manager.perChannelMode == false)
+        box.manager.perChannelMode = true
+        #expect(box.manager.perChannelMode == true)
+        box.manager.perChannelMode = false
+        #expect(box.manager.perChannelMode == false)
     }
 
     @Test func audioOutputDevicePersistence() {
-        let manager = SettingsManager()
+        let box = Sandbox()
+        defer { box.tearDown() }
+
         let device = "device-\(UUID().uuidString)"
-        manager.audioOutputDevice = device
-        #expect(manager.audioOutputDevice == device)
-        manager.audioOutputDevice = ""
+        box.manager.audioOutputDevice = device
+        #expect(box.manager.audioOutputDevice == device)
     }
 
     @Test func lastManualSettingsPersistence() {
-        let manager = SettingsManager()
+        let box = Sandbox()
+        defer { box.tearDown() }
+
         let json = "{\"levelerEnabled\":true}"
-        manager.lastManualSettings = json
-        #expect(manager.lastManualSettings == json)
-        manager.lastManualSettings = ""
+        box.manager.lastManualSettings = json
+        #expect(box.manager.lastManualSettings == json)
+    }
+
+    @Test func deleteProductionsPersistence() {
+        let box = Sandbox()
+        defer { box.tearDown() }
+
+        #expect(box.manager.deleteProductionsAfterDownload == false)
+        box.manager.deleteProductionsAfterDownload = true
+        #expect(box.manager.deleteProductionsAfterDownload == true)
     }
 
     @Test func defaultValuesAreEmpty() {
-        // Remove all keys to test defaults
-        let key = "audioOutputDevice"
-        let originalValue = UserDefaults.standard.string(forKey: key)
-        UserDefaults.standard.removeObject(forKey: key)
+        let box = Sandbox()
+        defer { box.tearDown() }
 
-        let manager = SettingsManager()
-        #expect(manager.audioOutputDevice == "")
+        #expect(box.manager.apiToken == "")
+        #expect(box.manager.audioOutputDevice == "")
+        #expect(box.manager.lastPresetUuid == "")
+        #expect(box.manager.lastManualSettings == "")
+        #expect(box.manager.appMode == .standard)
+    }
 
-        // Restore
-        if let original = originalValue {
-            UserDefaults.standard.set(original, forKey: key)
-        }
+    @Test func appModePersistsAndMigratesOldValue() {
+        let box = Sandbox()
+        defer { box.tearDown() }
+
+        box.manager.appMode = .mixPreparation
+        #expect(box.manager.appMode == .mixPreparation)
+        #expect(box.defaults.string(forKey: "appMode") == AppMode.mixPreparation.rawValue)
+
+        // 1.x stored "api" for what is now Standard mode
+        box.defaults.set("api", forKey: "appMode")
+        #expect(box.manager.appMode == .standard)
     }
 }

@@ -2,7 +2,13 @@ import Foundation
 
 @Observable
 final class SettingsManager {
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+
+    /// The app uses the standard defaults; tests pass a throwaway suite so
+    /// they never touch the user's real settings (the API token included).
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
 
     private enum Keys {
         static let apiToken = "apiToken"
