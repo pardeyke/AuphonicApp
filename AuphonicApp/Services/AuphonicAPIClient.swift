@@ -2,7 +2,7 @@ import Foundation
 import os
 
 @Observable
-final class AuphonicAPIClient {
+final class AuphonicAPIClient: AuphonicAPI {
     private static let logger = Logger(subsystem: "com.kpgbr.AuphonicApp", category: "api")
     private let baseURL = "https://auphonic.com/api"
     private let session = URLSession.shared
@@ -108,12 +108,6 @@ final class AuphonicAPIClient {
         return uuid
     }
 
-    func uploadFile(productionUuid: String, file: URL, onProgress: (@Sendable (Double) -> Void)? = nil) async throws {
-        try await uploadFiles(productionUuid: productionUuid,
-                              files: [(fieldName: "input_file", file: file)],
-                              onProgress: onProgress)
-    }
-
     /// Upload one or more files to a production. Multitrack productions use the
     /// track id as the form field name; singletrack uses "input_file".
     /// The multipart body is streamed to a temp file so large multichannel
@@ -122,7 +116,7 @@ final class AuphonicAPIClient {
     func uploadFiles(
         productionUuid: String,
         files: [(fieldName: String, file: URL)],
-        onProgress: (@Sendable (Double) -> Void)? = nil
+        onProgress: (@Sendable (Double) -> Void)?
     ) async throws {
         guard !token.isEmpty else { throw APIError.noToken }
 
@@ -284,7 +278,7 @@ final class AuphonicAPIClient {
         try validateResponse(data: data, response: response)
     }
 
-    func downloadFile(from urlString: String, onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
+    func downloadFile(from urlString: String, onProgress: (@Sendable (Double) -> Void)?) async throws -> URL {
         guard let url = URL(string: urlString) else {
             throw APIError.networkError("Invalid download URL")
         }

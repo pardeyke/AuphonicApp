@@ -5,13 +5,13 @@ import AVFoundation
 
 // MARK: - Test WAV Helpers
 
-private func tempWavURL() -> URL {
+func tempWavURL() -> URL {
     FileManager.default.temporaryDirectory
         .appendingPathComponent("auphonic_test_\(UUID().uuidString).wav")
 }
 
 /// Create a WAV where every channel holds a constant sample value.
-private func makeWav(
+func makeWav(
     url: URL,
     channels: Int,
     frames: Int = 4800,
@@ -52,7 +52,7 @@ private func makeWav(
 }
 
 /// Read all samples of one 0-based channel as floats
-private func readChannel(_ url: URL, channel: Int) throws -> [Float] {
+func readChannel(_ url: URL, channel: Int) throws -> [Float] {
     let file = try AVAudioFile(forReading: url)
     let frames = AVAudioFrameCount(file.length)
     guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames) else {
@@ -64,7 +64,7 @@ private func readChannel(_ url: URL, channel: Int) throws -> [Float] {
 }
 
 /// bext chunk payload with the given TimeReference
-private func bextData(timeReference: UInt64) -> Data {
+func bextData(timeReference: UInt64) -> Data {
     var data = Data(count: 602)
     data.withUnsafeMutableBytes { raw in
         raw.storeBytes(of: UInt32(truncatingIfNeeded: timeReference).littleEndian,

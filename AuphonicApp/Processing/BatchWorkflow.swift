@@ -20,7 +20,7 @@ final class BatchWorkflow {
         return Double(completedCount) / Double(totalCount)
     }
 
-    private let apiClient: AuphonicAPIClient
+    private let apiClient: any AuphonicAPI
     private var runTask: Task<Void, Never>?
 
     /// Housekeeping: delete each file's productions on Auphonic once its
@@ -33,8 +33,9 @@ final class BatchWorkflow {
 
     /// Max simultaneous Auphonic productions per file
     private static let maxConcurrentJobs = 3
-    private static let pollInterval: Duration = .seconds(2)
     private static let pollTimeout: TimeInterval = 3600
+    /// Time between two status polls; tests shorten it
+    var pollInterval: Duration = .seconds(2)
     /// Consecutive failed status polls tolerated before the file fails
     /// (about 30 s of an unreachable server at the 2 s interval)
     static let maxConsecutivePollFailures = 15
@@ -66,7 +67,7 @@ final class BatchWorkflow {
         }
     }
 
-    init(apiClient: AuphonicAPIClient) {
+    init(apiClient: any AuphonicAPI) {
         self.apiClient = apiClient
     }
 
@@ -659,7 +660,7 @@ final class BatchWorkflow {
         var failures = PollFailures()
 
         while Date() < deadline {
-            try await Task.sleep(for: Self.pollInterval)
+            try await Task.sleep(for: pollInterval)
 
             let status: ProductionStatus
             do {
