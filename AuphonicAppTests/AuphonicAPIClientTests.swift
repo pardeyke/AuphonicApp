@@ -221,4 +221,66 @@ struct AuphonicAPIClientTests {
         #expect(files?.first?["format"] as? String == "wav-24bit")
         #expect(body["bitrate"] == nil)
     }
+
+    // MARK: - Multipart body
+
+    private func stage(_ parts: [AuphonicAPIClient.MultipartFile], boundary: String = "BOUNDARY") throws -> Data {
+        let body = FileManager.default.temporaryDirectory.appendingPathComponent("body_\(UUID().uuidString).tmp")
+        defer { try? FileManager.default.removeItem(at: body) }
+        try AuphonicAPIClient.stageMultipartBody(parts, boundary: boundary, to: body)
+        return try Data(contentsOf: body)
+    }
+
+    private func tempFile(named name: String, contents: Data) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mp_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(name)
+        try contents.write(to: url)
+        return url
+    }
+
+    @Test func multipartBodyLayout() throws {
+        let a = try tempFile(named: "Ch_1_BOOM.wav", contents: Data("AAAA".utf8))
+        let b = try tempFile(named: "Ch_2_LAV.wav", contents: Data([0x00, 0xFF, 0x10]))
+        defer { for u in [a, b] { try? FileManager.default.removeItem(at: u.deletingLastPathComponent()) } }
+
+        let body = try stage([.init(fieldName: "Ch_1_BOOM", file: a), .init(fieldName: "Ch_2_LAV", file: b)])
+        let pieces: [Data] = [
+            Data("--BOUNDARY\r\n".utf8),
+            Data("Content-Disposition: form-data; name=\"Ch_1_BOOM\"; filename=\"Ch_1_BOOM.wav\"\r\n".utf8),
+            Data("Content-Type: application/octet-stream\r\n\r\n".utf8),
+            Data("AAAA".utf8), Data("\r\n".utf8),
+            Data("--BOUNDARY\r\n".utf8),
+            Data("Content-Disposition: form-data; name=\"Ch_2_LAV\"; filename=\"Ch_2_LAV.wav\"\r\n".utf8),
+            Data("Content-Type: application/octet-stream\r\n\r\n".utf8),
+            Data([0x00, 0xFF, 0x10]), Data("\r\n".utf8),
+            Data("--BOUNDARY--\r\n".utf8)
+        ]
+        let expected = pieces.reduce(Data()) { $0 + $1 }
+        #expect(body == expected)
+    }
+
+    /// Files larger than one 4 MB chunk are copied completely
+    @Test func multipartBodyCopiesLargeFilesInChunks() throws {
+        var payload = Data(count: 9 * 1024 * 1024 + 123)
+        payload[0] = 1; payload[payload.count - 1] = 2
+        let file = try tempFile(named: "big.wav", contents: payload)
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+
+        let body = try stage([.init(fieldName: "input_file", file: file)])
+        let headerEnd = body.range(of: Data("\r\n\r\n".utf8))!.upperBound
+        let copied = body[headerEnd..<(headerEnd + payload.count)]
+        #expect(copied.count == payload.count)
+        #expect(copied.first == 1)
+        #expect(copied.last == 2)
+        #expect(body.suffix(from: headerEnd + payload.count) == Data("\r\n--BOUNDARY--\r\n".utf8))
+    }
+
+    /// A quote or line break in a user's file name must not break the header
+    @Test func multipartFilenameIsEscaped() {
+        #expect(AuphonicAPIClient.multipartFilename("take \"one\".wav") == "take %22one%22.wav")
+        #expect(AuphonicAPIClient.multipartFilename("a\r\nb.wav") == "a%0D%0Ab.wav")
+        #expect(AuphonicAPIClient.multipartFilename("50%.wav") == "50%25.wav")
+        #expect(AuphonicAPIClient.multipartFilename("plain-name_01.wav") == "plain-name_01.wav")
+    }
 }

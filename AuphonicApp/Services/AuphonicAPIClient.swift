@@ -1,7 +1,9 @@
 import Foundation
+import os
 
 @Observable
 final class AuphonicAPIClient {
+    private static let logger = Logger(subsystem: "com.kpgbr.AuphonicApp", category: "api")
     private let baseURL = "https://auphonic.com/api"
     private let session = URLSession.shared
     var token: String = ""
@@ -115,7 +117,8 @@ final class AuphonicAPIClient {
     /// Upload one or more files to a production. Multitrack productions use the
     /// track id as the form field name; singletrack uses "input_file".
     /// The multipart body is streamed to a temp file so large multichannel
-    /// takes never have to be held in memory.
+    /// takes never have to be held in memory; staging it copies the whole
+    /// input once, so that runs off the main actor.
     func uploadFiles(
         productionUuid: String,
         files: [(fieldName: String, file: URL)],
@@ -134,33 +137,12 @@ final class AuphonicAPIClient {
 
         let tempBody = FileManager.default.temporaryDirectory
             .appendingPathComponent("auphonic_upload_\(UUID().uuidString).tmp")
-        FileManager.default.createFile(atPath: tempBody.path, contents: nil)
-        guard let bodyHandle = try? FileHandle(forWritingTo: tempBody) else {
-            throw APIError.networkError("Could not stage upload body")
-        }
         defer { try? FileManager.default.removeItem(at: tempBody) }
 
-        do {
-            for entry in files {
-                var header = "--\(boundary)\r\n"
-                header += "Content-Disposition: form-data; name=\"\(entry.fieldName)\"; filename=\"\(entry.file.lastPathComponent)\"\r\n"
-                header += "Content-Type: application/octet-stream\r\n\r\n"
-                try bodyHandle.write(contentsOf: Data(header.utf8))
-
-                let source = try FileHandle(forReadingFrom: entry.file)
-                defer { try? source.close() }
-                while let chunk = try source.read(upToCount: 4 * 1024 * 1024), !chunk.isEmpty {
-                    try bodyHandle.write(contentsOf: chunk)
-                }
-
-                try bodyHandle.write(contentsOf: Data("\r\n".utf8))
-            }
-            try bodyHandle.write(contentsOf: Data("--\(boundary)--\r\n".utf8))
-            try bodyHandle.close()
-        } catch {
-            try? bodyHandle.close()
-            throw error
-        }
+        let parts = files.map { MultipartFile(fieldName: $0.fieldName, file: $0.file) }
+        try await Task.detached(priority: .userInitiated) {
+            try Self.stageMultipartBody(parts, boundary: boundary, to: tempBody)
+        }.value
 
         let delegate = ProgressDelegate(onProgress: onProgress)
         let taskSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
@@ -168,6 +150,52 @@ final class AuphonicAPIClient {
 
         let (data, response) = try await taskSession.upload(for: request, fromFile: tempBody)
         try validateResponse(data: data, response: response)
+    }
+
+    struct MultipartFile: Sendable {
+        let fieldName: String
+        let file: URL
+    }
+
+    /// Writes a multipart/form-data body with one file part per entry to
+    /// `destination`, copying the files in 4 MB chunks. Checks for
+    /// cancellation between chunks so Cancel takes effect during the copy.
+    nonisolated static func stageMultipartBody(_ parts: [MultipartFile], boundary: String, to destination: URL) throws {
+        FileManager.default.createFile(atPath: destination.path, contents: nil)
+        guard let body = try? FileHandle(forWritingTo: destination) else {
+            throw APIError.networkError("Could not stage upload body")
+        }
+        defer { try? body.close() }
+
+        for part in parts {
+            try Task.checkCancellation()
+            var header = "--\(boundary)\r\n"
+            header += "Content-Disposition: form-data; name=\"\(part.fieldName)\"; "
+            header += "filename=\"\(multipartFilename(part.file.lastPathComponent))\"\r\n"
+            header += "Content-Type: application/octet-stream\r\n\r\n"
+            try body.write(contentsOf: Data(header.utf8))
+
+            let source = try FileHandle(forReadingFrom: part.file)
+            defer { try? source.close() }
+            while let chunk = try source.read(upToCount: 4 * 1024 * 1024), !chunk.isEmpty {
+                try Task.checkCancellation()
+                try body.write(contentsOf: chunk)
+            }
+
+            try body.write(contentsOf: Data("\r\n".utf8))
+        }
+        try body.write(contentsOf: Data("--\(boundary)--\r\n".utf8))
+    }
+
+    /// File names go into a quoted header value: a quote, a line break or a
+    /// backslash in the name (possible for user files in Standard mode) would
+    /// break the part header. Percent-encoded as RFC 7578 recommends.
+    nonisolated static func multipartFilename(_ name: String) -> String {
+        name.replacingOccurrences(of: "%", with: "%25")
+            .replacingOccurrences(of: "\"", with: "%22")
+            .replacingOccurrences(of: "\\", with: "%5C")
+            .replacingOccurrences(of: "\r", with: "%0D")
+            .replacingOccurrences(of: "\n", with: "%0A")
     }
 
     // MARK: - Multitrack Productions
@@ -307,7 +335,7 @@ final class AuphonicAPIClient {
         request.timeoutInterval = 30
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         if let bodyStr = String(data: request.httpBody!, encoding: .utf8) {
-            print("[AuphonicAPI] POST \(path): \(bodyStr)")
+            Self.logger.debug("POST \(path, privacy: .public): \(bodyStr, privacy: .private)")
         }
 
         let (data, response) = try await session.data(for: request)
@@ -348,7 +376,7 @@ final class AuphonicAPIClient {
             } else if let body = String(data: data, encoding: .utf8) {
                 message = String(body.prefix(500))
             }
-            print("[AuphonicAPI] HTTP \(httpResponse.statusCode): \(message)")
+            Self.logger.error("HTTP \(httpResponse.statusCode): \(message, privacy: .public)")
             throw APIError.httpError(httpResponse.statusCode, message)
         }
     }
@@ -356,7 +384,9 @@ final class AuphonicAPIClient {
 
 // MARK: - Progress Delegate
 
-private final class ProgressDelegate: NSObject, URLSessionTaskDelegate {
+/// URLSession calls its delegates on its own queue, so these must not be
+/// main-actor isolated; they only forward to a Sendable closure.
+nonisolated private final class ProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
     let onProgress: (@Sendable (Double) -> Void)?
 
     init(onProgress: (@Sendable (Double) -> Void)?) {
@@ -369,7 +399,7 @@ private final class ProgressDelegate: NSObject, URLSessionTaskDelegate {
     }
 }
 
-private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+nonisolated private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, Sendable {
     let onProgress: (@Sendable (Double) -> Void)?
 
     init(onProgress: (@Sendable (Double) -> Void)?) {
