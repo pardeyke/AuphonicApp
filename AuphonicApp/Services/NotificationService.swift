@@ -2,10 +2,9 @@ import UserNotifications
 
 enum NotificationService {
     static func show(title: String, body: String) {
-        let center = UNUserNotificationCenter.current()
-
-        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
+        Task {
+            let center = UNUserNotificationCenter.current()
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
 
             let content = UNMutableNotificationContent()
             content.title = title
@@ -17,7 +16,7 @@ enum NotificationService {
                 content: content,
                 trigger: nil
             )
-            center.add(request)
+            try? await center.add(request)
         }
     }
 }

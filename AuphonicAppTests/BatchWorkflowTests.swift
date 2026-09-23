@@ -122,9 +122,9 @@ struct BatchWorkflowTests {
             config.sharedOptions.levelerEnabled = true
             config.selectedPresetUuid = "podcast-preset"
         }
-        // Productions are created in channel order: prod-1 = Ch 1, prod-2 = Ch 3
-        scene.api.downloadContent[MockAuphonicAPI.singletrackOutputURL("prod-1")] = try processedMono(0.7)
-        scene.api.downloadContent[MockAuphonicAPI.singletrackOutputURL("prod-2")] = try processedMono(-0.5)
+        // The two channel jobs run concurrently, so match downloads by title
+        scene.api.downloadContentByTitle["take Ch 1"] = try processedMono(0.7)
+        scene.api.downloadContentByTitle["take Ch 3"] = try processedMono(-0.5)
 
         scene.workflow.start(groups: groups, destination: scene.destination)
         await scene.waitUntilFinished()
@@ -135,7 +135,7 @@ struct BatchWorkflowTests {
         #expect(try readChannel(output, channel: 1) == readChannel(file.url, channel: 1))
         #expect(abs(try readChannel(output, channel: 2)[0] - (-0.5)) < 1e-5)
 
-        #expect(scene.api.productions.count == 2)
+        #expect(Set(scene.api.productions.map(\.title)) == ["take Ch 1", "take Ch 3"])
         for production in scene.api.productions {
             #expect(production.uploads.count == 1)
             #expect(production.uploads[0].channels == 1)                     // mono per channel

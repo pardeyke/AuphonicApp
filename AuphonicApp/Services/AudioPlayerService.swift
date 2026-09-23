@@ -623,6 +623,8 @@ final class AudioPlayerService {
     // MARK: - Waveform Generation
 
     private var waveformGeneration: UInt64 = 0
+    /// The background scan for the current generation; cancelled by the next
+    private var waveformTask: Task<Void, Never>?
 
     /// In-memory cache of waveforms keyed by file URL, so switching files is instant.
     private static let waveformCache = WaveformCache()
@@ -646,42 +648,46 @@ final class AudioPlayerService {
             return
         }
 
-        // Applies a (partial or final) result if this scan is still current
-        let apply: ([Int: [Float]], Bool) -> Void = { [weak self] waveforms, isFinal in
-            guard let self, self.waveformGeneration == gen else { return }
-
-            if isFinal {
-                Self.waveformCache.store(waveforms, for: url)
-            }
-
-            if slot == .original {
-                self.waveformCacheA = waveforms
-                self.originalWaveform = waveforms[0] ?? []
-            } else {
-                self.waveformCacheB = waveforms
-                self.processedWaveform = waveforms[0] ?? []
-            }
-        }
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        // The scan runs detached; a newer generation cancels it, and every
+        // result hops back to the main actor and is dropped if it is stale.
+        waveformTask?.cancel()
+        waveformTask = Task.detached(priority: .userInitiated) { [weak self] in
             let result = Self.generateAllWaveforms(
                 url: url,
                 resolution: resolution,
-                isCancelled: { self == nil || self?.waveformGeneration != gen },
+                isCancelled: { Task.isCancelled },
                 onPartial: { partial in
-                    DispatchQueue.main.async { apply(partial, false) }
+                    Task { @MainActor [weak self] in
+                        self?.applyWaveforms(partial, isFinal: false, generation: gen, slot: slot, url: url)
+                    }
                 }
             )
-            guard let allWaveforms = result else { return }
+            guard let allWaveforms = result, !Task.isCancelled else { return }
+            await self?.applyWaveforms(allWaveforms, isFinal: true, generation: gen, slot: slot, url: url)
+        }
+    }
 
-            DispatchQueue.main.async { apply(allWaveforms, true) }
+    /// Applies a (partial or final) scan result if it is still the current one
+    private func applyWaveforms(_ waveforms: [Int: [Float]], isFinal: Bool, generation: UInt64, slot: Slot, url: URL) {
+        guard waveformGeneration == generation else { return }
+
+        if isFinal {
+            Self.waveformCache.store(waveforms, for: url)
+        }
+
+        if slot == .original {
+            waveformCacheA = waveforms
+            originalWaveform = waveforms[0] ?? []
+        } else {
+            waveformCacheB = waveforms
+            processedWaveform = waveforms[0] ?? []
         }
     }
 
     /// Reads the file in chunks and computes peak waveforms using vDSP for speed.
     /// Reports the bins filled so far after every chunk via `onPartial`, so the
     /// waveform can render progressively from left to right.
-    private static func generateAllWaveforms(
+    nonisolated private static func generateAllWaveforms(
         url: URL,
         resolution: Int,
         isCancelled: () -> Bool = { false },
@@ -774,7 +780,8 @@ final class AudioPlayerService {
         return file.processingFormat.sampleRate
     }
 
-    deinit {
+    isolated deinit {
+        waveformTask?.cancel()
         displayTimer?.invalidate()
         playerNodeA.stop()
         playerNodeB.stop()

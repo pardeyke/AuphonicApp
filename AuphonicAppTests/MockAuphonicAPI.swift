@@ -48,6 +48,9 @@ final class MockAuphonicAPI: AuphonicAPI {
     var failProcessingWith: String?
     /// Content of a download, by its URL string. Missing entries throw.
     var downloadContent: [String: Data] = [:]
+    /// Content of a singletrack download, by the production's title. Jobs of
+    /// one file run concurrently, so their production ids are not stable.
+    var downloadContentByTitle: [String: Data] = [:]
 
     func production(_ uuid: String) -> Production? { productions.first { $0.uuid == uuid } }
 
@@ -118,7 +121,9 @@ final class MockAuphonicAPI: AuphonicAPI {
     }
 
     func downloadFile(from urlString: String, onProgress: (@Sendable (Double) -> Void)?) async throws -> URL {
-        guard let data = downloadContent[urlString] else {
+        let byTitle = productions.first { Self.singletrackOutputURL($0.uuid) == urlString }
+            .flatMap { downloadContentByTitle[$0.title] }
+        guard let data = byTitle ?? downloadContent[urlString] else {
             throw AuphonicAPIClient.APIError.networkError("no mock content for \(urlString)")
         }
         let ext = URL(string: urlString)?.pathExtension ?? "bin"

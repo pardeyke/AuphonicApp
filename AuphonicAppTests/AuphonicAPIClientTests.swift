@@ -2,48 +2,6 @@ import Testing
 import Foundation
 @testable import AuphonicApp
 
-// MARK: - Mock URL Protocol
-
-private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
-    nonisolated(unsafe) static var mockResponses: [String: (Data, HTTPURLResponse)] = [:]
-
-    static func register(path: String, json: [String: Any], statusCode: Int = 200) {
-        let data = try! JSONSerialization.data(withJSONObject: json)
-        let url = URL(string: "https://auphonic.com/api\(path)")!
-        let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
-        mockResponses[path] = (data, response)
-    }
-
-    static func reset() {
-        mockResponses.removeAll()
-    }
-
-    override class func canInit(with request: URLRequest) -> Bool {
-        true
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        let path = request.url?.path ?? ""
-        let apiPath = path.replacingOccurrences(of: "/api", with: "", options: .anchored)
-
-        if let (data, response) = Self.mockResponses[apiPath] ?? Self.mockResponses[path] {
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-        } else {
-            let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data())
-        }
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
-}
-
 struct AuphonicAPIClientTests {
 
     // MARK: - Error Descriptions

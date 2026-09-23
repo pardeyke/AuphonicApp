@@ -27,6 +27,21 @@ final class BatchWorkflow {
     /// output has been written successfully (failed files keep theirs)
     var deleteProductionsAfterDownload = false
 
+    /// Temp files of the file currently being processed. Jobs register them
+    /// the moment they exist: a task group drops the results of children
+    /// that finished after a sibling threw, so returning temp URLs through
+    /// the group would leak them on a partial failure.
+    private var scratchFiles: [URL] = []
+
+    private func registerScratch(_ url: URL) {
+        scratchFiles.append(url)
+    }
+
+    private func removeScratchFiles() {
+        for url in scratchFiles { try? FileManager.default.removeItem(at: url) }
+        scratchFiles.removeAll()
+    }
+
     /// Cap the uploaded audio per job (seconds). Used by the settings test
     /// drive to never upload more than Auphonic's 3-minute billing minimum.
     var maxUploadDuration: Double?
@@ -200,15 +215,8 @@ final class BatchWorkflow {
 
         var results: [(job: UploadJob, downloaded: URL)] = []
         var productionUuids: [String] = []
-        // Every temp file is registered the moment its job finishes, so the
-        // deferred cleanup also covers jobs that completed before a sibling
-        // in the same batch failed (a failing job removes its own files).
-        var tempFiles: [URL] = []
-        defer {
-            for temp in tempFiles where temp != file.url {
-                try? FileManager.default.removeItem(at: temp)
-            }
-        }
+        scratchFiles.removeAll()
+        defer { removeScratchFiles() }
 
         var done = 0
         for batch in stride(from: 0, to: jobs.count, by: Self.maxConcurrentJobs).map({
@@ -217,7 +225,7 @@ final class BatchWorkflow {
             try Task.checkCancellation()
 
             try await withThrowingTaskGroup(
-                of: (job: UploadJob, downloaded: URL, extracted: URL, productionUuid: String).self
+                of: (job: UploadJob, downloaded: URL, productionUuid: String).self
             ) { group in
                 for job in batch {
                     group.addTask {
@@ -225,8 +233,6 @@ final class BatchWorkflow {
                     }
                 }
                 for try await result in group {
-                    tempFiles.append(result.extracted)
-                    tempFiles.append(result.downloaded)
                     results.append((result.job, result.downloaded))
                     productionUuids.append(result.productionUuid)
                     done += 1
@@ -587,7 +593,7 @@ final class BatchWorkflow {
         _ job: UploadJob,
         file: BatchFile,
         config: ChannelConfig
-    ) async throws -> (job: UploadJob, downloaded: URL, extracted: URL, productionUuid: String) {
+    ) async throws -> (job: UploadJob, downloaded: URL, productionUuid: String) {
         // 1. Extract the job's channels (skipped when the job covers the whole file)
         file.status = .processing("Extracting \(job.label)…")
         let source = file.url
@@ -611,6 +617,7 @@ final class BatchWorkflow {
                     maxDuration: maxDuration
                 )
             }.value
+            registerScratch(uploadFile)
         }
 
         do {
@@ -636,13 +643,9 @@ final class BatchWorkflow {
             // 5. Download
             file.status = .processing("Downloading \(job.label)…")
             let downloaded = try await apiClient.downloadFile(from: outputUrl)
+            registerScratch(downloaded)
 
-            return (job: job, downloaded: downloaded, extracted: uploadFile, productionUuid: uuid)
-        } catch {
-            if uploadFile != source {
-                try? FileManager.default.removeItem(at: uploadFile)
-            }
-            throw error
+            return (job: job, downloaded: downloaded, productionUuid: uuid)
         }
     }
 

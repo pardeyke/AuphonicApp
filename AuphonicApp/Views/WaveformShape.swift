@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct WaveformShape: Shape {
+nonisolated struct WaveformShape: Shape {
     let samples: [Float]
 
     func path(in rect: CGRect) -> Path {
