@@ -687,7 +687,7 @@ final class AudioPlayerService {
     /// Reads the file in chunks and computes peak waveforms using vDSP for speed.
     /// Reports the bins filled so far after every chunk via `onPartial`, so the
     /// waveform can render progressively from left to right.
-    nonisolated private static func generateAllWaveforms(
+    nonisolated static func generateAllWaveforms(
         url: URL,
         resolution: Int,
         isCancelled: () -> Bool = { false },
@@ -726,9 +726,15 @@ final class AudioPlayerService {
 
             guard let channelData = buffer.floatChannelData else { break }
             let chunkLen = Int(buffer.frameLength)
+            // A file whose header promises more frames than it holds returns
+            // nothing at the end; stop instead of spinning on an empty read.
+            guard chunkLen > 0 else { break }
 
-            // Process each bin that overlaps with this chunk
-            let firstBin = framesRead / samplesPerBin
+            // Process each bin that overlaps with this chunk. Integer division
+            // leaves up to `resolution - 1` frames past the last bin, and a read
+            // may return fewer frames than asked, so a chunk can start inside
+            // that tail. Clamp both ends or the range runs backwards and traps.
+            let firstBin = min(resolution - 1, framesRead / samplesPerBin)
             let lastBin = min(resolution - 1, (framesRead + chunkLen - 1) / samplesPerBin)
 
             for bin in firstBin...lastBin {
