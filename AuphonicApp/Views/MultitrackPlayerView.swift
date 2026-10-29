@@ -61,6 +61,8 @@ struct MultitrackPlayerView: View {
             }
             .buttonStyle(.plain)
             .disabled(!player.hasOriginal)
+            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            .accessibilityIdentifier("player.playPause")
 
             // Position
             VStack(alignment: .leading, spacing: 1) {
@@ -93,6 +95,7 @@ struct MultitrackPlayerView: View {
                     controlSize: .regular
                 )
                 .fixedSize()
+                .accessibilityIdentifier("player.slot")
             }
 
             if anySoloed {

@@ -6,7 +6,7 @@ import AVFoundation
 final class AppViewModel {
     // Services
     let settingsManager: SettingsManager
-    let apiClient = AuphonicAPIClient()
+    let apiClient: any AuphonicService
     let audioPlayer = AudioPlayerService()
 
     /// Standard mode sends whole files, Mix Preparation does channel surgery
@@ -69,10 +69,19 @@ final class AppViewModel {
         }
     }
 
-    /// Tests pass a `SettingsManager` on a throwaway defaults suite
-    init(settingsManager: SettingsManager? = nil) {
+    /// Time between two status polls of a production; `nil` keeps the
+    /// workflow's default. UI test launches poll the simulation faster.
+    private let pollInterval: Duration?
+
+    /// Tests pass a `SettingsManager` on a throwaway defaults suite; UI test
+    /// launches also pass `SimulatedAuphonicAPI`
+    init(settingsManager: SettingsManager? = nil,
+         apiClient: (any AuphonicService)? = nil,
+         pollInterval: Duration? = nil) {
         self.settingsManager = settingsManager ?? SettingsManager()
-        apiClient.token = self.settingsManager.apiToken
+        self.apiClient = apiClient ?? AuphonicAPIClient()
+        self.pollInterval = pollInterval
+        self.apiClient.token = self.settingsManager.apiToken
         mode = self.settingsManager.appMode
         audioPlayer.applyOutputDevice(named: self.settingsManager.audioOutputDevice)
     }
@@ -316,8 +325,7 @@ final class AppViewModel {
 
         guard let destination = chooseDestination() else { return }
 
-        let wf = BatchWorkflow(apiClient: apiClient)
-        wf.deleteProductionsAfterDownload = settingsManager.deleteProductionsAfterDownload
+        let wf = makeWorkflow()
         workflow = wf
 
         let finished: () -> Void = { [weak self] in
@@ -330,6 +338,13 @@ final class AppViewModel {
         case .mixPreparation:
             wf.start(groups: configuredGroups, destination: destination, onFinished: finished)
         }
+    }
+
+    private func makeWorkflow() -> BatchWorkflow {
+        let wf = BatchWorkflow(apiClient: apiClient)
+        wf.deleteProductionsAfterDownload = settingsManager.deleteProductionsAfterDownload
+        if let pollInterval { wf.pollInterval = pollInterval }
+        return wf
     }
 
     /// Destination folder for the output files (originals are never modified)
@@ -397,8 +412,7 @@ final class AppViewModel {
             .appendingPathComponent("auphonic_settings_test_\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
 
-        let wf = BatchWorkflow(apiClient: apiClient)
-        wf.deleteProductionsAfterDownload = settingsManager.deleteProductionsAfterDownload
+        let wf = makeWorkflow()
         // Never upload more than the 3-minute billing minimum for a test
         wf.maxUploadDuration = 180
         workflow = wf

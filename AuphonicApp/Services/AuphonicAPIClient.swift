@@ -2,7 +2,7 @@ import Foundation
 import os
 
 @Observable
-final class AuphonicAPIClient: AuphonicAPI {
+final class AuphonicAPIClient: AuphonicService {
     private static let logger = Logger(subsystem: "com.kpgbr.AuphonicApp", category: "api")
     private let baseURL = "https://auphonic.com/api"
     private let session = URLSession.shared

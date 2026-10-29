@@ -18,10 +18,12 @@ struct PresetListView: View {
             .onChange(of: selectedUuid) {
                 isModified = false
             }
+            .accessibilityIdentifier("preset.picker")
 
             Button("Store") {
                 onSavePreset()
             }
+            .accessibilityIdentifier("preset.store")
 
             Spacer()
         }

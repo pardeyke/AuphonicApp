@@ -14,6 +14,7 @@ struct StatusView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                    .accessibilityIdentifier("status.text")
 
                 Spacer()
 
@@ -27,12 +28,14 @@ struct StatusView: View {
                         NSWorkspace.shared.open(dir)
                     }
                     .font(.system(size: 11))
+                    .accessibilityIdentifier("status.showInFinder")
                 }
             }
 
             if progress >= 0 {
                 ProgressView(value: max(0, min(1, progress)))
                     .progressViewStyle(.linear)
+                    .accessibilityIdentifier("status.progress")
             }
         }
     }

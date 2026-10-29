@@ -38,6 +38,7 @@ struct ContentView: View {
                     selection: $viewModel.mode
                 )
                 .fixedSize()
+                .accessibilityIdentifier("toolbar.mode")
                 // Switching modes drops non-WAV files, which a running batch
                 // or a folder scan may still be working with
                 .disabled(viewModel.isProcessing || viewModel.isLoadingFiles)
@@ -53,6 +54,7 @@ struct ContentView: View {
                     Button("Cancel") {
                         viewModel.cancelProcessing()
                     }
+                    .accessibilityIdentifier("toolbar.cancel")
                 }
             } else {
                 // Test Settings and Process act on the selected take and share
@@ -64,6 +66,7 @@ struct ContentView: View {
                         viewModel.testSettings()
                     }
                     .disabled(!viewModel.canTestSettings)
+                    .accessibilityIdentifier("toolbar.testSettings")
                     .help("Process the selected take with this group's settings into a temporary file and load it into the player's Processed lane for A/B comparison. Uploads at most the first 3 minutes per upload (Auphonic's billing minimum), so a test never costs more than the minimum.")
                 }
                 .visibilityPriority(.low)
@@ -74,6 +77,7 @@ struct ContentView: View {
                     }
                     .keyboardShortcut(.return, modifiers: [.command, .shift])
                     .disabled(viewModel.selectedFile == nil)
+                    .accessibilityIdentifier("toolbar.process")
                     .help("Run the selected take on its own, with the same settings and output folder as the batch.")
                 }
                 .visibilityPriority(.high)
@@ -87,12 +91,14 @@ struct ContentView: View {
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(viewModel.batchFiles.isEmpty)
+                    .accessibilityIdentifier("toolbar.processBatch")
                 }
                 .visibilityPriority(.automatic)
             }
         }
         .alert("Save Preset", isPresented: $viewModel.showingSavePreset) {
             TextField("Preset name", text: $viewModel.savePresetName)
+                .accessibilityIdentifier("savePreset.name")
             Button("Save") {
                 let name = viewModel.savePresetName
                 viewModel.savePresetName = ""
@@ -225,6 +231,8 @@ struct ContentView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("detail.emptyState")
     }
 }
 

@@ -8,6 +8,8 @@ struct GlassCheckbox: View {
     @Binding var isOn: Bool
     var systemImage: String?
     var tint: Color = .accentColor
+    /// Defaults to `checkbox.<label>`
+    var identifier: String?
 
     var body: some View {
         Button {
@@ -37,6 +39,9 @@ struct GlassCheckbox: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier ?? "checkbox.\(label)")
+        .accessibilityValue(isOn ? "on" : "off")
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 

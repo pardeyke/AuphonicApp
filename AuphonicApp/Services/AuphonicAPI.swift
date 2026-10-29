@@ -27,6 +27,17 @@ protocol AuphonicAPI: AnyObject {
     func deleteProduction(uuid: String) async throws
 }
 
+/// Everything the app talks to Auphonic about: the batch engine's calls plus
+/// the account side (token, credits, presets). `AppViewModel` holds one of
+/// these, so UI tests can launch the app against `SimulatedAuphonicAPI`.
+protocol AuphonicService: AuphonicAPI {
+    var token: String { get set }
+    func fetchUserInfo() async throws -> UserCredits
+    func fetchPresets() async throws -> [AuphonicPreset]
+    func fetchPresetDetails(uuid: String) async throws -> [String: Any]
+    func savePreset(name: String, settings: [String: Any]) async throws -> String
+}
+
 extension AuphonicAPI {
     /// Singletrack productions take exactly one file under the `input_file` field
     func uploadFile(productionUuid: String, file: URL, onProgress: (@Sendable (Double) -> Void)? = nil) async throws {

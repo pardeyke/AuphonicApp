@@ -58,6 +58,7 @@ struct StandardModeView: View {
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("uploadPlan")
     }
 
     private var uploadPlanText: String {

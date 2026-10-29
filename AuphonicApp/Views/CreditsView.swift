@@ -85,6 +85,7 @@ struct CreditsView: View {
                                 Text(exceedsCredits
                                      ? "Over by \(DurationText.clock(abs(remaining), rounded: true))"
                                      : "Remaining: \(DurationText.clock(remaining, rounded: true))")
+                                    .accessibilityIdentifier("credits.remaining")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
@@ -94,12 +95,14 @@ struct CreditsView: View {
 
                                 // Right: cost
                                 Text("Cost: \(DurationText.clock(cost, rounded: true))")
+                                    .accessibilityIdentifier("credits.cost")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
                                     .padding(.trailing, 6)
                             } else {
                                 Text("Credits: \(DurationText.clock(totalCredits, rounded: true))")
+                                    .accessibilityIdentifier("credits.total")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
@@ -117,6 +120,7 @@ struct CreditsView: View {
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("credits.productions")
                 }
             }
         }

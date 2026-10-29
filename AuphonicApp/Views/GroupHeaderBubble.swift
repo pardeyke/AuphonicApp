@@ -32,6 +32,8 @@ struct GroupHeaderBubble: View {
                 }
                 .buttonStyle(.plain)
                 .help(isCollapsed ? "Show files in this group" : "Hide files in this group")
+                .accessibilityLabel(isCollapsed ? "Expand" : "Collapse")
+                .accessibilityIdentifier("group.collapse")
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -42,6 +44,7 @@ struct GroupHeaderBubble: View {
                         .foregroundStyle(isSelected ? .white : .primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                        .accessibilityIdentifier("group.timecode")
 
                     Spacer(minLength: 0)
 
@@ -50,6 +53,8 @@ struct GroupHeaderBubble: View {
                             .font(.system(size: 11))
                             .foregroundStyle(isSelected ? .white : .orange)
                             .frame(width: 18, height: 18)     // comfortable hover target
+                            .accessibilityLabel("Not configured")
+                            .accessibilityIdentifier("group.unconfigured")
                             .contentShape(Rectangle())
                             // `.help` waits for the system tooltip delay —
                             // a hover-driven popover shows without waiting.
@@ -81,6 +86,9 @@ struct GroupHeaderBubble: View {
                 .font(.system(size: 10))
                 .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
                 .lineLimit(1)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(channelCount) ch · \(fileCount) file\(fileCount == 1 ? "" : "s") · \(mode.displayName)")
+                .accessibilityIdentifier("group.summary")
             }
         }
         .padding(.horizontal, 12)
@@ -93,6 +101,7 @@ struct GroupHeaderBubble: View {
             in: .rect(cornerRadius: Self.cornerRadius)
         )
         .padding(.vertical, 4)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

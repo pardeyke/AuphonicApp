@@ -56,4 +56,13 @@ MVVM pattern with a service layer:
 
 ## Tests
 
-Test files in `AuphonicAppTests/` covering the API client, models, channel packing (`ChannelConfigTests`), grouping/extraction/replacement round trips with generated WAVs (`BatchProcessingTests`), WAV chunk handling, settings, formats, and credits. Uses `@testable import AuphonicApp`. Real sample recordings live in `Testfiles/` (untracked).
+Test files in `AuphonicAppTests/` covering the API client, models, channel packing (`ChannelConfigTests`), grouping/extraction/replacement round trips with generated WAVs (`BatchProcessingTests`), WAV chunk handling, settings, formats, credits, and the offline Auphonic simulation (`SimulatedAuphonicAPITests`). Uses `@testable import AuphonicApp`. Real sample recordings live in `Testfiles/` (untracked).
+
+### UI tests (`AuphonicAppUITests/`)
+
+End-to-end XCUITest suites that drive the real app against `SimulatedAuphonicAPI` (in the app target, active only with the `-AuphonicUITestMode` launch argument; see `UITestEnvironment` for the environment keys). The simulation renders every output as *input × 0.5* in the requested format, delivers multitrack tracks as 16-bit WAV in a stored ZIP plus a mono mixdown, and writes an `api-log.json` of every call into the app's container, which the tests read back.
+
+- `StandardModeUITests`, `MixPreparationUITests`, `ErrorHandlingUITests` — add files, every output format, presets, Settings JSON, test drive, cancel, grouping, singletrack/multitrack/mixdown, per-channel settings, failure scenarios, missing token → Settings, housekeeping. Outputs are checked on disk: chunk layout and metadata byte-identical, untouched channels bit-perfect, processed channels within quantization of the expected value (`OutputAssertions.swift`). Tests using `Testfiles/` recordings skip when the folder is absent.
+- Both the app and the test runner are sandboxed. Fixtures (`WavFixture`, a byte-level BWF writer) are written into the runner's container and handed to the app through the real **Add Files** open panel (Cmd+Shift+G to a path); the destination folder goes through the **Process** panel the same way (`AppDriver.swift`).
+- UI tests take over mouse and keyboard and press **Hide Others** at launch; don't use the Mac during a run (~25 min for all three suites). After a reboot, if the runner fails with "Timed out while enabling automation mode", `kill` the `testmanagerd` process and rerun.
+- Controls carry accessibility identifiers (`toolbar.*`, `sidebar.*`, `file.<name>` rows, `group.<n>`, `card.<title>` → `card.toggle` / `picker.<label>` / `slider.<label>`, `channel.<n>`, `checkbox.<label>`, `mixdown.target`, `preset.picker`, `status.text`, `credits.*`, `settings.*`). SwiftUI alert text fields drop identifiers; the Settings `Switch` toggles on click but its accessibility value stays 0.
