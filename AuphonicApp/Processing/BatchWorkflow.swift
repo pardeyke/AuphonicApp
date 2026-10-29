@@ -310,9 +310,10 @@ final class BatchWorkflow {
 
         try Task.checkCancellation()
         let title = source.deletingPathExtension().lastPathComponent
+        let settings = config.productionSettings(for: file)
         let uuid = try await apiClient.createProduction(
             presetUuid: config.presetUuidForProduction,
-            manualSettings: config.productionSettings,
+            manualSettings: settings,
             title: title
         )
 
@@ -332,16 +333,16 @@ final class BatchWorkflow {
         }
         defer { try? FileManager.default.removeItem(at: downloaded) }
 
-        // "Keep format" returns the input format, so fall back to what the
-        // API actually sent before falling back to the source extension
+        // With a preset in charge the format is only known from what the API
+        // actually sent; fall back to the source extension after that
         file.status = .processing("Writing output…")
-        let ext = config.outputFileExtension
+        let ext = config.outputFileExtension(for: file)
             ?? (downloaded.pathExtension.isEmpty ? source.pathExtension : downloaded.pathExtension)
         let outputURL = Self.resolveOutputURL(for: source, destination: destination, preferredExtension: ext)
         try FileManager.default.copyItem(at: downloaded, to: outputURL)
 
         if config.writeSettingsJson {
-            var payload = config.productionSettings
+            var payload = settings
             payload["preset"] = config.presetUuidForProduction
             writeSidecar(payload, next: outputURL)
         }

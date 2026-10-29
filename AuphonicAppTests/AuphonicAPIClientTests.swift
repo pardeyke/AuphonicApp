@@ -107,9 +107,10 @@ struct AuphonicAPIClientTests {
 
     // MARK: - Production Request Body
 
-    /// Standard mode "Keep Format" must not send `output_files`; the client
-    /// used to inject wav-24bit here, which turned every MP3 into a WAV.
-    @Test func keepFormatSendsNoOutputFiles() {
+    /// The client never injects `output_files` of its own (it used to force
+    /// wav-24bit here, which turned every MP3 into a WAV); Standard mode
+    /// resolves "Keep Format" per file before the body is built.
+    @Test func clientInjectsNoOutputFiles() {
         let config = StandardModeConfig()
         config.options.levelerEnabled = true
 

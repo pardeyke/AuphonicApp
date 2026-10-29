@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 
 enum OutputFormat: String, CaseIterable, Identifiable {
     case keep = "keep"
@@ -67,5 +68,40 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .vorbis: return "ogg"
         case .opus: return "opus"
         }
+    }
+
+    // MARK: - Keep Format
+
+    /// The Auphonic format that reproduces a source file's codec. Auphonic has
+    /// no "same as input" audio format (its `input` format returns the
+    /// unprocessed original), so "Keep Format" has to be resolved into one of
+    /// these before the production is created. PCM containers (WAV, AIFF, CAF)
+    /// come back as WAV, 16-bit when the source is 16-bit and 24-bit otherwise.
+    static func matching(formatID: AudioFormatID, bitDepth: Int, isFloat: Bool) -> OutputFormat {
+        switch formatID {
+        case kAudioFormatMPEGLayer3:
+            return .mp3
+        case kAudioFormatMPEG4AAC, kAudioFormatMPEG4AAC_HE, kAudioFormatMPEG4AAC_HE_V2,
+             kAudioFormatMPEG4AAC_LD, kAudioFormatMPEG4AAC_ELD, kAudioFormatMPEG4AAC_ELD_SBR,
+             kAudioFormatMPEG4AAC_ELD_V2:
+            return .aac
+        case kAudioFormatFLAC:
+            return .flac
+        case kAudioFormatAppleLossless:
+            return .alac
+        case kAudioFormatOpus:
+            return .opus
+        default:
+            return (isFloat || bitDepth > 16) ? .wav24 : .wav16
+        }
+    }
+
+    /// Smallest available bitrate that is not below the source's, so "Keep
+    /// Format" does not quietly degrade a lossy file. `nil` for lossless
+    /// formats or when the source bitrate cannot be estimated.
+    func bitrate(matchingBytes bytes: Int, duration: Double) -> Int? {
+        guard hasBitrate, bytes > 0, duration > 0 else { return nil }
+        let kbps = Double(bytes) * 8 / duration / 1000
+        return availableBitrates.first { Double($0) >= kbps } ?? availableBitrates.last
     }
 }

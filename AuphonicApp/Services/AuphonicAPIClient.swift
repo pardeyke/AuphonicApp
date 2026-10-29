@@ -77,9 +77,10 @@ final class AuphonicAPIClient: AuphonicAPI {
 
     /// Request body of a singletrack production. `output_files` is only sent
     /// when the caller asks for a format: Mix Preparation always forces WAV via
-    /// `ChannelConfig.settingsForJob`, and Standard mode omits it for "Keep
-    /// Format" so Auphonic mirrors the input format (or applies the preset's
-    /// own output files) instead of defaulting to WAV.
+    /// `ChannelConfig.settingsForJob`, Standard mode resolves "Keep Format"
+    /// per file in `StandardModeConfig.productionSettings(for:)`, and with an
+    /// unmodified preset it is left out so the preset's own output files apply.
+    /// The client never injects a format of its own.
     nonisolated static func productionRequestBody(presetUuid: String, manualSettings: [String: Any], title: String) -> [String: Any] {
         var body: [String: Any] = [
             "title": title,

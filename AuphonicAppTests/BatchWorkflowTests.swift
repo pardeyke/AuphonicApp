@@ -88,7 +88,11 @@ struct BatchWorkflowTests {
         let production = try #require(scene.api.production("prod-1"))
         #expect(production.title == "interview")
         #expect(production.started)
-        #expect(production.settings["output_files"] == nil)                  // keep format
+        // "Keep Format" resolved from the 24-bit source; without output
+        // files Auphonic would refuse to start the production
+        let outputFiles = production.settings["output_files"] as? [[String: Any]]
+        #expect(outputFiles?.count == 1)
+        #expect(outputFiles?.first?["format"] as? String == "wav-24bit")
         #expect(production.uploads.map(\.fieldName) == ["input_file"])
         #expect(production.uploads[0].file == file.url)                      // whole file, no extraction
         #expect(scene.api.deleted.isEmpty)
