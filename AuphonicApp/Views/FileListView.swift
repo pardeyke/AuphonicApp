@@ -81,6 +81,7 @@ struct FileListView: View {
                     }
                     .buttonStyle(.borderless)
                     .help(allCollapsed ? "Expand all groups" : "Collapse all groups")
+                    .accessibilityIdentifier("sidebar.collapseAll")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -112,6 +113,8 @@ struct FileListView: View {
         .onTapGesture {
             if isEnabled { openFilePicker() }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sidebar.dropZone")
     }
 
     /// A ScrollView with pinned section headers rather than a `List`: macOS
@@ -122,7 +125,7 @@ struct FileListView: View {
             // One glass layer for all group bubbles
             GlassEffectContainer(spacing: GlassSpacing.chips) {
                 LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    ForEach(viewModel.groups) { group in
+                    ForEach(Array(viewModel.groups.enumerated()), id: \.element.id) { groupIndex, group in
                         Section {
                             if !collapsedGroupIDs.contains(group.id) {
                                 ForEach(Array(group.files.enumerated()), id: \.element.id) { index, file in
@@ -134,6 +137,8 @@ struct FileListView: View {
                             }
                         } header: {
                             groupHeaderRow(group)
+                                .accessibilityElement(children: .contain)
+                                .accessibilityIdentifier("group.\(groupIndex + 1)")
                                 .padding(.horizontal, 8)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
@@ -182,6 +187,24 @@ struct FileListView: View {
             .onTapGesture {
                 viewModel.selectFile(file)
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("file.\(Self.rowName(file))")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Row name used in accessibility identifiers: the file's base name
+    static func rowName(_ file: BatchFile) -> String {
+        file.url.deletingPathExtension().lastPathComponent
+    }
+
+    /// Processing state as UI tests read it from the status icon
+    private static func stateName(_ status: BatchFileStatus) -> String {
+        switch status {
+        case .pending: return "pending"
+        case .processing: return "processing"
+        case .done: return "done"
+        case .failed: return "failed"
+        }
     }
 
     private func groupHeaderRow(_ group: FileGroup) -> some View {
@@ -238,6 +261,7 @@ struct FileListView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!isEnabled)
+                .accessibilityIdentifier("sidebar.addFiles")
 
                 if viewModel.isLoadingFiles {
                     ProgressView().controlSize(.small)
@@ -249,6 +273,7 @@ struct FileListView: View {
                     Text("\(viewModel.batchFiles.count) file\(viewModel.batchFiles.count == 1 ? "" : "s")")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("sidebar.fileCount")
 
                     Button {
                         viewModel.clearFiles()
@@ -258,6 +283,7 @@ struct FileListView: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled(!isEnabled)
+                    .accessibilityIdentifier("sidebar.clear")
                 }
             }
             .padding(.horizontal, 12)
@@ -291,6 +317,7 @@ struct FileListView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
+                            .accessibilityIdentifier("file.status")
                     }
                 case .failed(let message):
                     Text(message)
@@ -298,17 +325,20 @@ struct FileListView: View {
                         .foregroundStyle(.red)
                         .lineLimit(2)
                         .truncationMode(.tail)
+                        .accessibilityIdentifier("file.status")
                 case .done:
                     Text("\(file.timecodeString) · processed")
                         .font(infoFont)
                         .foregroundStyle(.green)
                         .lineLimit(1)
+                        .accessibilityIdentifier("file.status")
                 case .pending:
                     Text("\(file.timecodeString) · \(file.channelCount)ch · \(file.bitDepth)\(file.isFloat ? "f" : "")bit · \(DurationText.clock(file.duration))")
                         .font(infoFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .accessibilityIdentifier("file.status")
                 }
             }
 
@@ -323,6 +353,8 @@ struct FileListView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Remove")
+                .accessibilityIdentifier("file.remove")
             }
         }
     }
@@ -347,6 +379,9 @@ struct FileListView: View {
         }
         .font(.system(size: 18))
         .frame(width: 22)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.stateName(file.status))
+        .accessibilityIdentifier("file.state")
     }
 
     // MARK: - File Picker

@@ -6,13 +6,7 @@ import Foundation
 /// test host is the sandboxed app itself, so writing to `.standard` here
 /// would overwrite the user's real settings — an earlier version of these
 /// tests wiped the API token that way.
-/// Token store that never leaves the test process
-final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
-    private(set) var token: String?
-    init(token: String? = nil) { self.token = token }
-    func readToken() -> String? { token }
-    func writeToken(_ token: String?) { self.token = token }
-}
+/// `InMemoryTokenStore` (app target) keeps the token in the test process.
 
 struct SettingsManagerTests {
 

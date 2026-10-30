@@ -5,7 +5,9 @@ struct AuphonicAppApp: App {
     /// One batch per app: the view model is shared by the main window and
     /// the Settings scene, and `Window` (not `WindowGroup`) means Cmd+N cannot
     /// open a second, independent batch.
-    @State private var viewModel = AppViewModel()
+    @State private var viewModel = UITestEnvironment.isActive
+        ? UITestEnvironment.makeViewModel()
+        : AppViewModel()
 
     var body: some Scene {
         Window("AuphonicApp", id: "main") {

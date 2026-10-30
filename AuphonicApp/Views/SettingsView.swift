@@ -16,6 +16,7 @@ struct SettingsView: View {
         Form {
             Section("Auphonic Account") {
                 SecureField("API Token", text: $token)
+                    .accessibilityIdentifier("settings.token")
                     .focused($tokenFieldFocused)
                     .onSubmit(commitToken)
                     .onChange(of: tokenFieldFocused) { _, focused in
@@ -39,6 +40,7 @@ struct SettingsView: View {
             Section {
                 Toggle("Delete productions on Auphonic after download",
                        isOn: $settingsManager.deleteProductionsAfterDownload)
+                    .accessibilityIdentifier("settings.deleteAfterDownload")
                 Text("Removes each production from your Auphonic account once its audio has been downloaded and written to the output file. Failed files keep their productions.")
                     .font(.callout)
                     .foregroundStyle(.secondary)

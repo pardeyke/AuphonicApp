@@ -18,6 +18,10 @@ final class BatchFile: Identifiable {
     let channelCount: Int
     let bitDepth: Int
     let isFloat: Bool
+    /// Codec of the container (kAudioFormatLinearPCM, kAudioFormatMPEGLayer3, …);
+    /// Standard mode's "Keep Format" picks the Auphonic output format from it
+    let formatID: AudioFormatID
+    let fileSize: Int               // bytes, 0 if unknown
     let sampleRate: Double
     let duration: Double            // seconds
     let frameCount: Int64
@@ -34,6 +38,8 @@ final class BatchFile: Identifiable {
 
         self.url = url
         self.channelCount = Int(audioFile.fileFormat.channelCount)
+        self.formatID = audioFile.fileFormat.streamDescription.pointee.mFormatID
+        self.fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
         self.sampleRate = audioFile.fileFormat.sampleRate
         self.frameCount = audioFile.length
         self.duration = sampleRate > 0 ? Double(audioFile.length) / sampleRate : 0

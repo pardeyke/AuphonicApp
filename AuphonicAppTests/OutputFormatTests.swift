@@ -1,7 +1,47 @@
 import Testing
+import AVFoundation
 @testable import AuphonicApp
 
 struct OutputFormatTests {
+
+    // MARK: - Keep Format
+
+    /// Every codec Core Audio can hand us maps to the Auphonic format that
+    /// reproduces it; PCM containers become WAV of the matching bit depth
+    @Test func matchingFormatFollowsTheSourceCodec() {
+        #expect(OutputFormat.matching(formatID: kAudioFormatMPEGLayer3, bitDepth: 0, isFloat: false) == .mp3)
+        #expect(OutputFormat.matching(formatID: kAudioFormatMPEG4AAC, bitDepth: 0, isFloat: false) == .aac)
+        #expect(OutputFormat.matching(formatID: kAudioFormatMPEG4AAC_HE, bitDepth: 0, isFloat: false) == .aac)
+        #expect(OutputFormat.matching(formatID: kAudioFormatFLAC, bitDepth: 24, isFloat: false) == .flac)
+        #expect(OutputFormat.matching(formatID: kAudioFormatAppleLossless, bitDepth: 0, isFloat: false) == .alac)
+        #expect(OutputFormat.matching(formatID: kAudioFormatOpus, bitDepth: 0, isFloat: false) == .opus)
+    }
+
+    @Test func pcmSourcesBecomeWavOfTheirBitDepth() {
+        #expect(OutputFormat.matching(formatID: kAudioFormatLinearPCM, bitDepth: 16, isFloat: false) == .wav16)
+        #expect(OutputFormat.matching(formatID: kAudioFormatLinearPCM, bitDepth: 24, isFloat: false) == .wav24)
+        #expect(OutputFormat.matching(formatID: kAudioFormatLinearPCM, bitDepth: 32, isFloat: true) == .wav24)
+        // Unknown codecs fall back to the PCM rule rather than to a lossy format
+        #expect(OutputFormat.matching(formatID: kAudioFormatMicrosoftGSM, bitDepth: 0, isFloat: false) == .wav16)
+    }
+
+    /// "Keep Format" on a lossy file asks for the next available bitrate at
+    /// or above the source's, never below it
+    @Test func matchingBitrateNeverDegradesTheSource() {
+        // 1 MB over 60 s is about 133 kbps; the next MP3 step up is 160
+        #expect(OutputFormat.mp3.bitrate(matchingBytes: 1_000_000, duration: 60) == 160)
+        // Exactly 128 kbps keeps 128
+        #expect(OutputFormat.mp3.bitrate(matchingBytes: 128_000 * 60 / 8, duration: 60) == 128)
+        // Beyond the top of the list the top is used
+        #expect(OutputFormat.aac.bitrate(matchingBytes: 100_000_000, duration: 60) == 320)
+    }
+
+    @Test func matchingBitrateIsNilWhenNotApplicable() {
+        #expect(OutputFormat.wav24.bitrate(matchingBytes: 1_000_000, duration: 60) == nil)
+        #expect(OutputFormat.flac.bitrate(matchingBytes: 1_000_000, duration: 60) == nil)
+        #expect(OutputFormat.mp3.bitrate(matchingBytes: 0, duration: 60) == nil)
+        #expect(OutputFormat.mp3.bitrate(matchingBytes: 1_000_000, duration: 0) == nil)
+    }
 
     // MARK: - Raw Values
 

@@ -2,6 +2,8 @@ import UserNotifications
 
 enum NotificationService {
     static func show(title: String, body: String) {
+        // UI test runs must not raise the notification permission prompt
+        guard !UITestEnvironment.isActive else { return }
         Task {
             let center = UNUserNotificationCenter.current()
             guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }

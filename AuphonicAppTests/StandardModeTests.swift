@@ -11,7 +11,14 @@ struct StandardModeConfigTests {
         let config = StandardModeConfig()
         #expect(config.outputFormat == .keep)
         #expect(config.presetUuidForProduction.isEmpty)
-        #expect(config.outputFileExtension == nil)
+    }
+
+    /// A take on disk, read back as the batch would see it
+    private func take(bitDepth: Int = 24, isFloat: Bool = false) throws -> BatchFile {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("standard_mode_\(UUID().uuidString).wav")
+        try makeWav(url: url, channels: 2, bitDepth: bitDepth, isFloat: isFloat) { _ in 0.1 }
+        return try #require(BatchFile(url: url))
     }
 
     /// Nothing enabled, no preset, no conversion — nothing worth billing
@@ -26,11 +33,13 @@ struct StandardModeConfigTests {
     }
 
     /// A pure format conversion is a legitimate production on its own
-    @Test func formatConversionAloneMakesItValid() {
+    @Test func formatConversionAloneMakesItValid() throws {
         let config = StandardModeConfig()
         config.options.outputFormat = .mp3
         #expect(config.hasValidConfiguration)
-        #expect(config.outputFileExtension == "mp3")
+        let file = try take()
+        defer { try? FileManager.default.removeItem(at: file.url) }
+        #expect(config.outputFileExtension(for: file) == "mp3")
     }
 
     @Test func presetAloneMakesItValid() {
@@ -63,14 +72,67 @@ struct StandardModeConfigTests {
         #expect(files?.first?["bitrate"] as? String == "192")
     }
 
-    /// "Keep format" must not send output_files, so Auphonic mirrors the input
-    @Test func keepFormatSendsNoOutputFiles() {
+    /// Auphonic has no "same as input" format and refuses to start a
+    /// production without output files ("Can't start the production: it is
+    /// already started or you have to provide more data!"), so "Keep Format"
+    /// has to name the source's own format per file.
+    @Test func keepFormatResolvesToTheSourceFormat() throws {
         let config = StandardModeConfig()
         config.options.levelerEnabled = true
 
-        let settings = config.productionSettings
-        #expect(settings["output_files"] == nil)
+        let file = try take(bitDepth: 24)
+        defer { try? FileManager.default.removeItem(at: file.url) }
+
+        let settings = config.productionSettings(for: file)
+        let files = settings["output_files"] as? [[String: Any]]
+        #expect(files?.count == 1)
+        #expect(files?.first?["format"] as? String == "wav-24bit")
+        #expect(files?.first?["bitrate"] == nil)
+        #expect(config.outputFormat(for: file) == .wav24)
+        #expect(config.outputFileExtension(for: file) == "wav")
         #expect(settings["output_format"] == nil)
+    }
+
+    @Test func keepFormatFollowsTheSourceBitDepth() throws {
+        let config = StandardModeConfig()
+        let pcm16 = try take(bitDepth: 16)
+        let float32 = try take(bitDepth: 32, isFloat: true)
+        defer {
+            try? FileManager.default.removeItem(at: pcm16.url)
+            try? FileManager.default.removeItem(at: float32.url)
+        }
+        #expect(config.outputFormat(for: pcm16) == .wav16)
+        #expect(config.outputFormat(for: float32) == .wav24)
+    }
+
+    /// An explicit format wins over whatever the source is
+    @Test func explicitFormatIgnoresTheSource() throws {
+        let config = StandardModeConfig()
+        config.options.outputFormat = .flac
+
+        let file = try take()
+        defer { try? FileManager.default.removeItem(at: file.url) }
+
+        let files = config.productionSettings(for: file)["output_files"] as? [[String: Any]]
+        #expect(files?.first?["format"] as? String == "flac")
+        #expect(config.outputFormat(for: file) == .flac)
+    }
+
+    /// With an unmodified preset its own output files stay authoritative
+    @Test func keepFormatWithPresetSendsNoOutputFiles() throws {
+        let config = StandardModeConfig()
+        config.selectedPresetUuid = "preset-123"
+
+        let file = try take()
+        defer { try? FileManager.default.removeItem(at: file.url) }
+
+        #expect(config.productionSettings(for: file)["output_files"] == nil)
+        #expect(config.outputFormat(for: file) == nil)
+        #expect(config.outputFileExtension(for: file) == nil)
+
+        // Editing the settings drops the preset, so the format is resolved again
+        config.presetModified = true
+        #expect(config.outputFormat(for: file) == .wav24)
     }
 
     /// Cutting is merged into the same algorithms object

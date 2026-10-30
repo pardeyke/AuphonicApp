@@ -53,6 +53,7 @@ struct ChannelConfigView: View {
                 controlSize: .large
             )
             .fixedSize()
+            .accessibilityIdentifier("group.productionMode")
 
             InfoButton(title: "Production Mode", text: AlgorithmInfo.productionMode)
         }
@@ -84,7 +85,8 @@ struct ChannelConfigView: View {
                                 get: { channel.enabled },
                                 set: { channel.enabled = $0; onChange?() }
                             ),
-                            systemImage: "waveform"
+                            systemImage: "waveform",
+                            identifier: "channel.\(channel.id + 1)"
                         )
                     }
                 }
@@ -123,6 +125,7 @@ struct ChannelConfigView: View {
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("uploadPlan")
     }
 
     private var uploadPlanText: String {
@@ -270,6 +273,8 @@ struct ChannelConfigView: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("channelTab.\(channel.id + 1)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

@@ -38,10 +38,35 @@ final class StandardModeConfig {
         options.outputFormat
     }
 
-    /// Extension of the file Auphonic will return; `keep` mirrors the input,
-    /// so the caller has to fall back to the source extension in that case.
-    var outputFileExtension: String? {
-        outputFormat == .keep ? nil : outputFormat.fileExtension
+    /// Format Auphonic is asked for when processing `file`. Auphonic has no
+    /// "same as input" audio format and will not start a production without
+    /// `output_files`, so "Keep Format" is resolved from the file's own codec
+    /// and bit depth. `nil` when an unmodified preset is in charge: its own
+    /// output files stay authoritative then.
+    func outputFormat(for file: BatchFile) -> OutputFormat? {
+        if outputFormat != .keep { return outputFormat }
+        guard presetUuidForProduction.isEmpty else { return nil }
+        return OutputFormat.matching(formatID: file.formatID, bitDepth: file.bitDepth, isFloat: file.isFloat)
+    }
+
+    /// Request settings for one file: `productionSettings` plus the resolved
+    /// output file where "Keep Format" would otherwise send none.
+    func productionSettings(for file: BatchFile) -> [String: Any] {
+        var settings = productionSettings
+        if outputFormat == .keep, let format = outputFormat(for: file) {
+            var outputFile: [String: Any] = ["format": format.rawValue]
+            if let bitrate = format.bitrate(matchingBytes: file.fileSize, duration: file.duration) {
+                outputFile["bitrate"] = "\(bitrate)"
+            }
+            settings["output_files"] = [outputFile]
+        }
+        return settings
+    }
+
+    /// Extension of the file Auphonic will return for `file`; `nil` when a
+    /// preset decides the format, so the caller has to look at what arrived.
+    func outputFileExtension(for file: BatchFile) -> String? {
+        outputFormat(for: file)?.fileExtension
     }
 
     /// Whether there is anything worth sending: a preset, at least one enabled

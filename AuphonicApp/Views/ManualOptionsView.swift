@@ -645,6 +645,8 @@ struct SettingsCard<Content: View>: View {
                         .toggleStyle(.switch)
                         .controlSize(.small)
                         .labelsHidden()
+                        .accessibilityLabel(title)
+                        .accessibilityIdentifier("card.toggle")
                 }
 
                 VStack(alignment: .leading, spacing: 1) {
@@ -677,6 +679,10 @@ struct SettingsCard<Content: View>: View {
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .strokeBorder(.separator, lineWidth: 1)
         )
+        // UI tests address a card's controls through the card, because
+        // labels like "Method" repeat across cards
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("card.\(title)")
     }
 }
 
@@ -738,6 +744,8 @@ struct PickerRow<SelectionValue: Hashable, Content: View>: View {
             }
             .labelsHidden()
             .frame(maxWidth: 230)
+            .accessibilityLabel(label)
+            .accessibilityIdentifier("picker.\(label)")
 
             InfoButton(title: label, text: info)
 
@@ -784,11 +792,14 @@ struct SliderRow: View {
             Slider(value: index, in: 0...Double(values.count - 1), step: 1)
                 .controlSize(.small)
                 .frame(maxWidth: 230)
+                .accessibilityLabel(label)
+                .accessibilityIdentifier("slider.\(label)")
 
             Text(display(selection))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 88, alignment: .leading)
+                .accessibilityIdentifier("sliderValue.\(label)")
 
             InfoButton(title: label, text: info)
 

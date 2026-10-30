@@ -1,0 +1,9 @@
+{
+  "id" : "a4cf64f9-f51b-45bf-a66b-b2a5e37823fe",
+  "targets" : [
+    {
+      "id" : "c82dbbed-fbc1-44f5-bdde-cdb6c55aed90",
+      "name" : "AuphonicApp"
+    }
+  ]
+}

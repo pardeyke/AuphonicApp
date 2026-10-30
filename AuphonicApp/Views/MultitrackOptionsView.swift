@@ -65,6 +65,7 @@ struct MultitrackOptionsView: View {
                     }
                     .labelsHidden()
                     .frame(maxWidth: 230)
+                    .accessibilityIdentifier("mixdown.target")
 
                     InfoButton(title: "Mixdown target channel", text: AlgorithmInfo.mixdownTarget)
 
@@ -80,6 +81,7 @@ struct MultitrackOptionsView: View {
                     )
                     .font(.system(size: 10))
                     .foregroundStyle(.orange)
+                    .accessibilityIdentifier("mixdown.overwriteWarning")
                 }
 
                 Text("The mixdown is always requested as a mono file.")
